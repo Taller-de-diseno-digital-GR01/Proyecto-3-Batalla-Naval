@@ -1,0 +1,20 @@
+*.bkp
+*.dtmp
+
+src/build/
+*.json
+*.fasm
+*.frames
+*.bit
+
+# Artefactos de sesion de Vivado (batch mode, generados en el cwd al invocarlo)
+.Xil/
+*.jou
+*.log
+*.tcl
+clockInfo.txt
+
+__pycache__/
+*.pyc
+
+sw/.venv/
