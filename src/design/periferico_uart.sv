@@ -1,4 +1,4 @@
-// Los puertos del bus llevan sufijo _i/_o porque la seccion 3.4.3 del enunciado los define asi, es la excepcion al prefijo del resto del repo
+// Los puertos del bus llevan sufijo _i/_o porque la seccion 4.5.5 del enunciado los define asi, es la excepcion al prefijo del resto del repo
 module periferico_uart #(parameter WIDTH = 32, parameter TICKS_BIT = 868, parameter TICKS_X16 = 54) (
   input logic clk_i,
   input logic rst_i,
@@ -11,10 +11,10 @@ module periferico_uart #(parameter WIDTH = 32, parameter TICKS_BIT = 868, parame
   output logic tx_o // linea serial hacia el pin
   );
 
-  // Las dos direcciones de datos las fija el enunciado, la del control la escogio el equipo
-  localparam logic [1:0] ADDR_DATOS_TX = 2'b00;
-  localparam logic [1:0] ADDR_DATOS_RX = 2'b01;
-  localparam logic [1:0] ADDR_CONTROL = 2'b10;
+  // El mapa lo fija la tabla de la seccion 4.4.3, control en 0x0001_0040, TX en 0x44 y RX en 0x48
+  localparam logic [1:0] ADDR_CONTROL = 2'b00;
+  localparam logic [1:0] ADDR_DATOS_TX = 2'b01;
+  localparam logic [1:0] ADDR_DATOS_RX = 2'b10;
   localparam BIT_SEND = 0;
   localparam BIT_NEW_RX = 1;
 
