@@ -23,8 +23,7 @@ module periferico_uart #(parameter WIDTH = 32, parameter TICKS_BIT = 868, parame
 
   logic [BYTE_WIDTH-1:0] reg_tx;
   logic [BYTE_WIDTH-1:0] reg_rx;
-  logic send;
-  logic new_rx;
+  logic [WIDTH-1:0] reg_control;
 
   logic listo_tx;
   logic listo_rx;
@@ -34,7 +33,7 @@ module periferico_uart #(parameter WIDTH = 32, parameter TICKS_BIT = 868, parame
   uart_tx #(.TICKS_BIT(TICKS_BIT)) nucleo_tx (
     .clk(clk_i),
     .rst(rst_i),
-    .i_enviar(send),
+    .i_enviar(reg_control[BIT_SEND]),
     .i_dato(reg_tx),
     .o_listo(listo_tx),
     .o_tx(tx_o)
@@ -48,42 +47,36 @@ module periferico_uart #(parameter WIDTH = 32, parameter TICKS_BIT = 868, parame
     .o_dato(dato_rx)
   );
 
-  // send es WC, sube cuando se lo escriben y lo baja el periferico solo al terminar la transferencia
   always_ff @(posedge clk_i) begin
-    if (rst_i) begin
-      reg_tx <= '0;
-      send <= 1'b0;
-    end
-    else begin
-      if (write_enable_i && addr_i == ADDR_DATOS_TX) reg_tx <= wdata_i[BYTE_WIDTH-1:0];
-      // Bajarlo con listo_tx deja un bit entero de margen antes de que el nucleo se rearme y mande el byte dos veces
-      if (write_enable_i && addr_i == ADDR_CONTROL && wdata_i[BIT_SEND]) send <= 1'b1;
-      else if (listo_tx) send <= 1'b0;
-    end
+    if (rst_i) reg_tx <= '0;
+    else if (write_enable_i && addr_i == ADDR_DATOS_TX) reg_tx <= wdata_i[BYTE_WIDTH-1:0];
   end
 
-  // new_rx es RW, o sea que una escritura al control lo deja en lo que diga el bit 1, tal como pide el enunciado
   always_ff @(posedge clk_i) begin
-    if (rst_i) begin
-      reg_rx <= '0;
-      new_rx <= 1'b0;
-    end
-    // Un byte que llega le gana a la escritura del mismo ciclo, si no se perderia el dato recien recibido
-    else if (listo_rx) begin
-      reg_rx <= dato_rx;
-      new_rx <= 1'b1;
-    end
-    else if (write_enable_i) begin
-      if (addr_i == ADDR_DATOS_RX) reg_rx <= wdata_i[BYTE_WIDTH-1:0];
-      if (addr_i == ADDR_CONTROL) new_rx <= wdata_i[BIT_NEW_RX];
+    if (rst_i) reg_rx <= '0;
+    else if (listo_rx) reg_rx <= dato_rx;
+    else if (write_enable_i && addr_i == ADDR_DATOS_RX) reg_rx <= wdata_i[BYTE_WIDTH-1:0];
+  end
+
+  // Cada campo se actualiza por su indice, los bits sin campo se quedan en cero porque nadie los asigna despues del reset
+  always_ff @(posedge clk_i) begin
+    if (rst_i) reg_control <= '0;
+    else begin
+      // send es WC, sube cuando se lo escriben y lo baja el periferico solo, bajarlo con listo_tx deja un bit entero de margen antes de que el nucleo se rearme y mande el byte dos veces
+      if (write_enable_i && addr_i == ADDR_CONTROL && wdata_i[BIT_SEND]) reg_control[BIT_SEND] <= 1'b1;
+      else if (listo_tx) reg_control[BIT_SEND] <= 1'b0;
+
+      // new_rx es RW, un byte que llega le gana a la escritura del mismo ciclo, si no se perderia el dato recien recibido
+      if (listo_rx) reg_control[BIT_NEW_RX] <= 1'b1;
+      else if (write_enable_i && addr_i == ADDR_CONTROL) reg_control[BIT_NEW_RX] <= wdata_i[BIT_NEW_RX];
     end
   end
 
   always_comb begin
     case (addr_i)
+      ADDR_CONTROL: rdata_o = reg_control;
       ADDR_DATOS_TX: rdata_o = {{(WIDTH-BYTE_WIDTH){1'b0}}, reg_tx};
       ADDR_DATOS_RX: rdata_o = {{(WIDTH-BYTE_WIDTH){1'b0}}, reg_rx};
-      ADDR_CONTROL: rdata_o = {{(WIDTH-2){1'b0}}, new_rx, send};
       default: rdata_o = '0; // la direccion 11 no se usa, devuelve ceros
     endcase
   end
