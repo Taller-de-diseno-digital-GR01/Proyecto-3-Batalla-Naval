@@ -1,10 +1,10 @@
-# M11 - Transmisor-UART
+# UART_transmisor
 
 > Viene del Proyecto 2 y en el Proyecto 3 no se instancia. Armaba las tramas `I`, `L` y `F` del Ahorcado a partir de eventos de la FSM y las mandaba byte a byte. En el Proyecto 3 las tramas las arma el programa en ensamblador y las escribe directo en `PERIFERICO_UART`, porque la sección 4.1 del enunciado deja toda la lógica del juego en software. El mapa de registros que usa esta documentación (control en `2'b10`) tampoco es el del Proyecto 3.
 
 ## a) Nombre del módulo
 
-M11_Transmisor-UART
+UART_transmisor
 
 ## b) Diagrama modular
 
@@ -84,7 +84,7 @@ Recibe `i_state` y `i_modo` de `M13_FSM`, `i_letra_state`, `i_letra_lista` e `i_
 `REG_Palabra-escogida`. No le devuelve nada a ninguno, es un módulo de salida pura hacia el
 periférico, igual que `M04_Mostrar-LCD` lo es hacia el LCD.
 
-Comparte el periférico UART con `M10_Receptor-UART`, y ese reparto lo resuelve `ARBITRO_UART`,
+Comparte el periférico UART con `UART_receptor`, y ese reparto lo resuelve `ARBITRO_UART`,
 que le da prioridad al receptor. De ahí sale `i_bus_libre`, la única entrada que este módulo tuvo
 que agregar para convivir con el otro maestro. Cuando el bus no es suyo, el módulo no avanza y
 reintenta el ciclo siguiente.

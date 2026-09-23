@@ -1,10 +1,10 @@
-# M10 - Receptor UART
+# UART_receptor
 
 > Viene del Proyecto 2 y en el Proyecto 3 no se instancia. Sondeaba `new_rx`, leía el byte y filtraba letras según el estado de la FSM del Ahorcado. En el Proyecto 3 ese trabajo lo hace el programa en ensamblador directo sobre `PERIFERICO_UART`, porque la sección 4.1 del enunciado deja toda la lógica del juego en software. El periférico que sí se usa está en `PERIFERICO_UART.md`. El mapa de registros que usa esta documentación (control en `2'b10`) tampoco es el del Proyecto 3.
 
 ## a) Nombre del módulo
 
-M10_Receptor-UART
+UART_receptor
 
 ## b) Diagrama modular
 
@@ -40,7 +40,7 @@ todo lo que no debe llegar a la lógica del juego.
 - `i_state[2:0]`, estado actual, desde `M13_FSM`. De acá solo le interesa JUEGO.
 
 El dato no le llega por una flecha propia en el diagrama de tercer nivel, entra por el bus de 32
-bits que comparte con `M11_Transmisor-UART` a través de `ARBITRO_UART`.
+bits que comparte con `UART_transmisor` a través de `ARBITRO_UART`.
 
 El módulo está parametrizado con `WIDTH = 32`, el ancho del bus. El byte serial es
 `BYTE_WIDTH = 8` y va como `localparam` dentro de la lista de parámetros, porque los núcleos del
@@ -76,7 +76,7 @@ hace falta, porque la FSM no participa en el ciclo de validación de letras.
 
 De `M13_FSM` recibe `i_state`, y lo usa para decidir si la letra pasa o se bota.
 
-El módulo comparte el bus de 32 bits con `M11_Transmisor-UART`, que es quien transmite. Los dos
+El módulo comparte el bus de 32 bits con `UART_transmisor`, que es quien transmite. Los dos
 acceden al mismo periférico, y quien resuelve el choque es `ARBITRO_UART`, que le da prioridad
 absoluta a este módulo. Por eso el receptor se escribió como si el bus fuera solo suyo, no tiene
 entrada de concesión ni sabe esperar, su FSM avanza pase lo que pase.

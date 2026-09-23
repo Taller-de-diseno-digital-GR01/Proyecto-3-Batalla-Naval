@@ -61,7 +61,7 @@ esperar 8680 ciclos por byte.
 ## f) Relación con otros módulos
 
 Hacia adentro habla con un solo maestro, el CPU. En el Proyecto 2 había dos
-(`M10_Receptor-UART` y `M11_Transmisor-UART`) y por eso existía `ARBITRO_UART`. Acá toda esa
+(`UART_receptor` y `UART_transmisor`) y por eso existía `ARBITRO_UART`. Acá toda esa
 lógica pasa al ensamblador y el periférico ve un único puerto, sin árbitro en el medio.
 
 El periférico ocupa `0x0001_0040` a `0x0001_004F`. El decodificador de direcciones activa
