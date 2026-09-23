@@ -58,7 +58,6 @@ module periferico_uart #(parameter WIDTH = 32, parameter TICKS_BIT = 868, parame
     else if (write_enable_i && addr_i == ADDR_DATOS_RX) reg_rx <= wdata_i[BYTE_WIDTH-1:0];
   end
 
-  // Cada campo se actualiza por su indice, los bits sin campo se quedan en cero porque nadie los asigna despues del reset
   always_ff @(posedge clk_i) begin
     if (rst_i) reg_control <= '0;
     else begin
