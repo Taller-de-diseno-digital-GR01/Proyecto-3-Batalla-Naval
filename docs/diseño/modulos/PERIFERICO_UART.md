@@ -30,8 +30,6 @@ disparos) entra por acá, y todo lo que la app necesita saber de la partida sale
 No sabe nada del juego. No conoce tramas, ni barcos, ni turnos. Mueve bytes en las dos
 direcciones y levanta banderas para que el programa en ensamblador las lea.
 
----
-
 ## d) Entradas
 
 - `clk_i`, `rst_i`.
@@ -48,15 +46,11 @@ El módulo está parametrizado con `WIDTH = 32`, `TICKS_BIT = 868` y `TICKS_X16 
 últimos se le pasan tal cual a los núcleos, y en simulación se reescalan a valores chicos para no
 esperar 8680 ciclos por byte.
 
----
-
 ## e) Salidas
 
 - `rdata_o[WIDTH-1:0]`, contenido del registro apuntado por `addr_i`, hacia el multiplexor de
   lectura que llega a `DataIn_i` del CPU.
 - `tx_o`, línea serial hacia el pin A18 de la Basys 3.
-
----
 
 ## f) Relación con otros módulos
 
@@ -73,8 +67,6 @@ Hacia afuera habla con la app de PC del Jugador 2. `rx_i` y `tx_o` salen directo
 puente USB-UART, que es el mismo cable con el que se programa la tarjeta.
 
 Los dos núcleos que instancia adentro, `uart_tx` y `uart_rx`, solo los usa este módulo.
-
----
 
 ## g) Explicación de funcionamiento
 
@@ -95,8 +87,6 @@ Nada de esto bloquea al CPU. El lazo principal sondea `new_rx` en cada vuelta ju
 botones del Jugador 1, que es lo que permite la colocación concurrente. Un byte a 115200 baudios
 tarda unos 8680 ciclos, así que el lazo tiene tiempo de sobra para dar muchas vueltas entre byte y
 byte.
-
----
 
 ## h) Diseño
 
@@ -173,10 +163,10 @@ con los nombres traducidos al estilo del repo. Solo cambiaron los genéricos, po
 venían calculados para un reloj de 16 MHz.
 
 - `uart_tx` cuenta `TICKS_BIT` ciclos por bit. A 100 MHz y 115200 baudios eso da
-  `100e6 / 115200 = 868.06`, se usa **868**. El baudaje real queda en 115207, un error de 0.006%.
+  `100e6 / 115200 = 868.06`, se usa 868. El baudaje real queda en 115207, un error de 0.006%.
   El genérico original era 139.
 - `uart_rx` sobremuestrea a 16 veces el baudaje, así que cuenta `TICKS_X16` ciclos por tick. Eso
-  da `868.06 / 16 = 54.25`, se usa **54**. El genérico original era 9.
+  da `868.06 / 16 = 54.25`, se usa 54. El genérico original era 9.
 
 El redondeo del receptor es el que aprieta, 54 en vez de 54.25 corre el muestreo un 0.47% por
 bit. El receptor detecta el flanco de arranque, espera 8 ticks para caer al centro del bit, y de
@@ -212,8 +202,6 @@ direcciones están cubiertas. Los tres bloques secuenciales, uno por registro, s
 reset síncrono. Sintetizado con yosys (`synth -top periferico_uart`) no aparece ningún
 `Latch inferred` en el log.
 
----
-
 ## i) Diagrama esquemático detallado del diseño
 
 ```mermaid
@@ -247,15 +235,13 @@ flowchart LR
 
 `clk_i` y `rst_i` entran a los tres registros y a los dos núcleos aunque no se dibujen.
 
----
-
 ## j) Diagrama completo de conexiones del diseño
 
 Es el único módulo con puertos hacia el puente USB-UART, así que acá van las restricciones de pin
 de `src/fpga/basys3.xdc`:
 
-- `rx_i`, al pin **B18**, `RsRx` del puente USB-UART.
-- `tx_o`, al pin **A18**, `RsTx` del puente USB-UART.
+- `rx_i`, al pin B18, `RsRx` del puente USB-UART.
+- `tx_o`, al pin A18, `RsTx` del puente USB-UART.
 - Los dos con `IOSTANDARD LVCMOS33`.
 
 Conexiones en el top:

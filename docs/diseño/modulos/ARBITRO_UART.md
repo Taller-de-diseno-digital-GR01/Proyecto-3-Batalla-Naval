@@ -32,8 +32,6 @@ independientes obliga a poner algo en el medio.
 Aparte del multiplexado hace un segundo trabajo que no es obvio, recompone las escrituras al
 registro de control para que un maestro no le borre el bit al otro.
 
----
-
 ## d) Entradas
 
 - `i_rx_addr[1:0]`, `i_rx_we`, `i_rx_wdata[WIDTH-1:0]`: petición de `UART_receptor`.
@@ -43,16 +41,12 @@ registro de control para que un maestro no le borre el bit al otro.
 No tiene `clk` ni `rst`. Es combinacional puro, no guarda estado. Está parametrizado con
 `WIDTH = 32`, el ancho del bus.
 
----
-
 ## e) Salidas
 
 - `o_addr[1:0]`, `o_we`, `o_wdata[WIDTH-1:0]`: petición ganadora, hacia `PERIFERICO_UART`.
 - `o_rx_rdata[WIDTH-1:0]`: lo que ve `UART_receptor` de vuelta.
 - `o_tx_rdata[WIDTH-1:0]`: lo que ve `UART_transmisor` de vuelta.
 - `o_tx_bus_libre`: le avisa a `UART_transmisor` que este ciclo el bus es suyo.
-
----
 
 ## f) Relación con otros módulos
 
@@ -67,8 +61,6 @@ En el diagrama de tercer nivel va dentro de `CONTROL_JUEGO`, entre UART_receptor
 La primera versión de ese diagrama no lo tenía porque se dibujó cuando el UART todavía se pensaba
 como un solo maestro.
 
----
-
 ## g) Explicación de funcionamiento
 
 En cada ciclo el árbitro mira si alguno de los dos maestros está pidiendo el bus de verdad. Pedir
@@ -82,8 +74,6 @@ control, que es lo que los dos quieren leer cuando están sondeando.
 
 Al que pierde no se le devuelve el `rdata` del ganador, se le devuelven ceros. Eso es importante
 y es la parte que más fácil se hace mal.
-
----
 
 ## h) Diseño
 
@@ -161,8 +151,6 @@ Todo el módulo es `always_comb` y `assign`. El `always_comb` asigna las tres sa
 ramas del if, sin caminos sin cubrir. `make synth SYNTH_TOP=arbitro_uart` pasa sin
 `Latch inferred` en el log.
 
----
-
 ## i) Diagrama esquemático detallado del diseño
 
 ```mermaid
@@ -197,8 +185,6 @@ flowchart LR
 
     CMP_RX --> OUT_LIBRE(["o_tx_bus_libre"])
 ```
-
----
 
 ## j) Diagrama completo de conexiones del diseño
 

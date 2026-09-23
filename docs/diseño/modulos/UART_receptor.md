@@ -30,8 +30,6 @@ Recibe los bytes que manda la aplicación del PC, se queda solo con los que son 
 durante una partida activa, y los entrega a `M07_Comparador-letra`. Es el punto donde se descarta
 todo lo que no debe llegar a la lógica del juego.
 
----
-
 ## d) Entradas
 
 - `clk`, `rst`.
@@ -46,8 +44,6 @@ El módulo está parametrizado con `WIDTH = 32`, el ancho del bus. El byte seria
 `BYTE_WIDTH = 8` y va como `localparam` dentro de la lista de parámetros, porque los núcleos del
 curso siempre mueven 8 bits y no tiene sentido que dependa del ancho del bus.
 
----
-
 ## e) Salidas
 
 - `o_letra[BYTE_WIDTH-1:0]`, letra recibida en ASCII tal como salió del periférico, hacia
@@ -59,8 +55,6 @@ curso siempre mueven 8 bits y no tiene sentido que dependa del ancho del bus.
 
 `o_letra` y `o_valid_w` salen de registros, así que juntas cumplen el papel de `REG_Letra-in` del
 diagrama de tercer nivel y en el top no hace falta un registro aparte.
-
----
 
 ## f) Relación con otros módulos
 
@@ -86,8 +80,6 @@ control. Aun así el choque existe, porque escribir ese registro con ceros tambi
 `send` del transmisor. Esa parte la arregla el árbitro recomponiendo la palabra, y está explicada
 en su documento.
 
----
-
 ## g) Explicación de funcionamiento
 
 El módulo vive sondeando `new_rx`. Mientras esté en cero no hace nada y no toca el bus más allá de
@@ -108,8 +100,6 @@ mientras el sistema está en selección de modo o mostrando el resultado final s
 punto. No llega a `M07_Comparador-letra`, no consume intento y no toca el temporizador. La
 aplicación de PC además filtra antes de mandar, pero ese filtro es por comodidad, el que de verdad
 manda es este.
-
----
 
 ## h) Diseño
 
@@ -173,8 +163,6 @@ tarda unos 87 µs en llegar completo, y el ciclo de sondeo de esta FSM dura tres
 100 MHz, o sea 30 ns. Sobra margen de tres órdenes de magnitud, así que no hay riesgo de perder un
 byte por sondear demasiado lento.
 
----
-
 ## i) Diagrama esquemático detallado del diseño
 
 ```mermaid
@@ -205,8 +193,6 @@ flowchart LR
 ```
 
 `clk` y `rst` entran a `REG_LETRA`, a `REG_VALID` y a `FSM_BUS` aunque no se dibujen.
-
----
 
 ## j) Diagrama completo de conexiones del diseño
 
