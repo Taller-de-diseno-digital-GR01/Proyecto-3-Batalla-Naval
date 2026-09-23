@@ -1,5 +1,7 @@
 # ARBITRO_UART
 
+> Viene del Proyecto 2 y en el Proyecto 3 no se instancia. Allá repartía el bus de `PERIFERICO_UART` entre dos maestros, `M10_Receptor-UART` y `M11_Transmisor-UART`. Acá el único maestro es el CPU, así que no hay nada que arbitrar. El periférico que sí se usa está en `PERIFERICO_UART.md`. El mapa de registros que usa esta documentación (control en `2'b10`) tampoco es el del Proyecto 3.
+
 ## a) Nombre del módulo
 
 ARBITRO_UART

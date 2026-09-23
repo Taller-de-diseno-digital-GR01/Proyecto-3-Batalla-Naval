@@ -1,5 +1,7 @@
 # M10 - Receptor UART
 
+> Viene del Proyecto 2 y en el Proyecto 3 no se instancia. Sondeaba `new_rx`, leía el byte y filtraba letras según el estado de la FSM del Ahorcado. En el Proyecto 3 ese trabajo lo hace el programa en ensamblador directo sobre `PERIFERICO_UART`, porque la sección 4.1 del enunciado deja toda la lógica del juego en software. El periférico que sí se usa está en `PERIFERICO_UART.md`. El mapa de registros que usa esta documentación (control en `2'b10`) tampoco es el del Proyecto 3.
+
 ## a) Nombre del módulo
 
 M10_Receptor-UART

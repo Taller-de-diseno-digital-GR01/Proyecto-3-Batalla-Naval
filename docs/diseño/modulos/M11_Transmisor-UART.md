@@ -1,5 +1,7 @@
 # M11 - Transmisor-UART
 
+> Viene del Proyecto 2 y en el Proyecto 3 no se instancia. Armaba las tramas `I`, `L` y `F` del Ahorcado a partir de eventos de la FSM y las mandaba byte a byte. En el Proyecto 3 las tramas las arma el programa en ensamblador y las escribe directo en `PERIFERICO_UART`, porque la sección 4.1 del enunciado deja toda la lógica del juego en software. El mapa de registros que usa esta documentación (control en `2'b10`) tampoco es el del Proyecto 3.
+
 ## a) Nombre del módulo
 
 M11_Transmisor-UART
