@@ -77,7 +77,7 @@ Todo lo que el módulo tiene que decir viaja empaquetado dentro de `o_wdata`, un
 La etiqueta `modo/letra_state/Resultado/w_word/Intentos` del diagrama de nivel 3 describe ese
 contenido, no puertos separados.
 
-## f) Explicación de la relación con otros módulos
+## f) Relación con otros módulos
 
 Recibe `i_state` y `i_modo` de `M13_FSM`, `i_letra_state`, `i_letra_lista` e `i_mascara` de
 `M07_Comparador-letra`, `i_intentos` de `M12_Contador-Intentos` y `i_word_length` de
@@ -252,7 +252,7 @@ El bloque de salidas es un `always_comb` con valores por defecto asignados antes
 que ninguna combinación queda sin cubrir. `make synth SYNTH_TOP=transmisor_uart` pasa sin
 `Latch inferred` en el log.
 
-## i) Diagrama esquemático detallado (por compuertas lógicas)
+## i) Diagrama esquemático detallado del diseño
 
 ```mermaid
 flowchart LR
