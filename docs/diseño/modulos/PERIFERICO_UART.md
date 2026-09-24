@@ -8,14 +8,16 @@ PERIFERICO_UART
 
 ```mermaid
 flowchart LR
-    IN_BUS(["write_enable_i, addr_i, wdata_i<br/>(bus de datos del CPU)"]) --> REGS["REG_CONTROL<br/>REG_DATOS_TX<br/>REG_DATOS_RX"]
-    REGS --> NUC_TX["uart_tx<br/>115200 baud"]
-    NUC_TX -->|o_listo| REGS
-    IN_RX(["rx_i (pin B18)"]) --> NUC_RX["uart_rx<br/>115200 baud"]
-    NUC_RX -->|"o_dato, o_dato_listo"| REGS
-    NUC_TX --> OUT_TX(["tx_o (pin A18)"])
-    REGS --> OUT_RD(["rdata_o<br/>(bus de datos del CPU)"])
+    IN_WE(["write_enable_i<br/>(AND_WE)"]) --> PUART["PERIFERICO_UART<br/>0x0001_0040 a 0x0001_004F"]
+    IN_ADDR(["addr_i[1:0]<br/>(DataAddress_o[3:2])"]) --> PUART
+    IN_WD(["wdata_i[31:0]<br/>(DataOut_o)"]) --> PUART
+    IN_RX(["rx_i<br/>(pin B18)"]) --> PUART
+    PUART --> OUT_RD(["rdata_o[31:0]<br/>(MUX_LECTURA)"])
+    PUART --> OUT_TX(["tx_o<br/>(pin A18)"])
 ```
+
+Es el bloque `PERIFERICO_UART` de `../diagramas/nivel03.md` visto desde afuera. Lo que tiene adentro
+está en el inciso i).
 
 ## c) Objetivo del módulo
 
@@ -33,8 +35,8 @@ direcciones y levanta banderas para que el programa en ensamblador las lea.
 ## d) Entradas
 
 - `clk_i`, `rst_i`.
-- `write_enable_i`, habilitación de escritura, desde el decodificador de direcciones del bus de
-  datos del CPU.
+- `write_enable_i`, habilitación de escritura, desde `AND_WE` del bus de datos (`we_o` del CPU en AND
+  con `sel_uart`).
 - `addr_i[1:0]`, dirección del registro, sale de `DataAddress_o[3:2]` del CPU.
 - `wdata_i[WIDTH-1:0]`, dato a escribir, desde `DataOut_o` del CPU.
 - `rx_i`, línea serial cruda, desde el pin B18 de la Basys 3.
@@ -66,7 +68,8 @@ no sirven para distinguir registros.
 Hacia afuera habla con la app de PC del Jugador 2. `rx_i` y `tx_o` salen directo a los pines del
 puente USB-UART, que es el mismo cable con el que se programa la tarjeta.
 
-Los dos núcleos que instancia adentro, `uart_tx` y `uart_rx`, solo los usa este módulo.
+Los dos núcleos que instancia adentro, `uart_tx` y `uart_rx`, solo los usa este módulo. Tienen su
+propio doc en `NUCLEO_UART_TX.md` y `NUCLEO_UART_RX.md`.
 
 ## g) Explicación de funcionamiento
 
@@ -76,8 +79,8 @@ Para transmitir, el programa escribe el byte en el registro de datos de transmis
 levanta el bit `send` del registro de control. El periférico sostiene ese bit mientras el núcleo
 suelta el byte por la línea, y lo baja solo cuando el núcleo avisa que terminó. Ese bit hace dos
 trabajos a la vez. Es la orden de arranque y también la bandera de ocupado que el programa sondea
-antes de mandar el siguiente byte de una trama. El enunciado lo define como WC, lo escribe el CPU
-y lo limpia el hardware.
+antes de mandar el siguiente byte de una trama. El enunciado del Proyecto 2 lo define como WC, lo
+escribe el CPU y lo limpia el hardware.
 
 Para recibir, el núcleo avisa con un pulso de un ciclo que hay un byte nuevo. El periférico lo
 guarda en el registro de datos de recepción y levanta `new_rx`. Ese bit se queda alto hasta que
@@ -177,10 +180,10 @@ veces de margen.
 
 ### La ventana muerta del núcleo de transmisión
 
-`UART_tx.vhd` levanta `start_reset` en el estado de parada y solo lo baja al volver a reposo, y
-las dos transiciones ocurren en ticks de baudaje. Entre una y otra pasa un bit entero, unos
-8.7 µs, durante los cuales el registro que atrapa la orden de arranque se mantiene en cero. Un
-pulso de un ciclo en `i_enviar` que caiga en esa ventana se pierde sin bandera de error ni nada.
+`uart_tx` levanta `limpiar_arranque` en el estado `PARADA` y solo lo baja en el siguiente tick, ya en
+`REPOSO`. Entre una y otra pasa un bit entero, unos 8.7 µs, durante los cuales `arranque_pedido`, el
+registro que atrapa la orden de arranque, se mantiene en cero. Un pulso de un ciclo en `i_enviar` que
+caiga en esa ventana se pierde sin bandera de error ni nada. El detalle está en `NUCLEO_UART_TX.md`.
 
 Por eso este periférico maneja `i_enviar` con el bit `send` sostenido y no con un pulso. Mientras
 `send` esté alto el núcleo atrapa la orden apenas sale de la ventana, y `send` se baja justo cuando
@@ -235,10 +238,14 @@ flowchart LR
 
 `clk_i` y `rst_i` entran a los tres registros y a los dos núcleos aunque no se dibujen.
 
+El método pide este esquemático por compuertas. Acá se deja en registros, comparadores y un
+multiplexor, porque cada uno de esos bloques sale directo de una línea del `.sv` y yosys es el que lo
+baja a compuertas y LUTs. Los núcleos se abren en sus propios docs.
+
 ## j) Diagrama completo de conexiones del diseño
 
 Es el único módulo con puertos hacia el puente USB-UART, así que acá van las restricciones de pin
-de `src/fpga/basys3.xdc`:
+que tienen que quedar en `src/fpga/basys3.xdc` cuando se arme:
 
 - `rx_i`, al pin B18, `RsRx` del puente USB-UART.
 - `tx_o`, al pin A18, `RsTx` del puente USB-UART.
@@ -248,11 +255,11 @@ Conexiones en el top:
 
 - `clk_i`, al reloj global de 100 MHz, pin W5.
 - `rst_i`, al reset del sistema.
-- `write_enable_i`, al `we_o` del CPU filtrado por el decodificador de direcciones, en alto solo
-  cuando `DataAddress_o` cae entre `0x0001_0040` y `0x0001_004F`.
+- `write_enable_i`, a la salida de `AND_WE`, en alto solo cuando `we_o` está en alto y
+  `DataAddress_o` cae entre `0x0001_0040` y `0x0001_004F`.
 - `addr_i[1:0]`, a `DataAddress_o[3:2]`.
 - `wdata_i[31:0]`, a `DataOut_o`.
-- `rdata_o[31:0]`, al multiplexor de lectura que alimenta `DataIn_i` del CPU.
+- `rdata_o[31:0]`, a `MUX_LECTURA`, que alimenta `DataIn_i` del CPU.
 - `rx_i`, `tx_o`, a los puertos del top con el mismo nombre.
 
 Igual que en los demás módulos, el diagrama por chips que pide el método no aplica a un diseño
