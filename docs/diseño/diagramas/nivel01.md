@@ -33,7 +33,7 @@ flowchart LR
 ## Objetivos
 
 - Implementar una partida de Batalla Naval para dos jugadores con tableros independientes de 8 × 8 y barcos de 4, 3 y 2 casillas.
-- Permitir que el Jugador 1 interactúe con la FPGA y que el Jugador 2 lo haga mediante una aplicación de PC.
+- Permitir que el Jugador 1 juegue por medio de la interacción con la FPGA y que el Jugador 2 lo haga mediante una aplicación de PC.
 - Mantener las reglas y los tableros bajo el control del programa ensamblador ejecutado por el procesador de la FPGA.
 - Mostrar a cada jugador únicamente la información que le corresponde conocer.
 
