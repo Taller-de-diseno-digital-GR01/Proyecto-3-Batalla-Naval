@@ -254,62 +254,27 @@ que ninguna combinación queda sin cubrir. `make synth SYNTH_TOP=transmisor_uart
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    STATEIN(["i_state"]) --> DECJ["comparador<br/>dec_juego"]
-    STATEIN --> DECF["comparador<br/>dec_fin (OR de 2 igualdades)"]
-    DECJ --> DJP["D-FF<br/>dec_juego_prev"]
-    DECF --> DFP["D-FF<br/>dec_fin_prev"]
-    CLK(["clk"]) --> DJP
-    CLK --> DFP
-    DECJ --> ANDJ["AND (prev invertido)"]
-    DJP --> ANDJ
-    ANDJ --> PULSOI["pulso_ini"]
-    DECF --> ANDF["AND (prev invertido)"]
-    DFP --> ANDF
-    ANDF --> PULSOF["pulso_fin"]
+![Esquemático por compuertas de UART_transmisor](../diagramas/transmisor_uart.png)
 
-    PULSOI --> LATCHI["FF set/clear<br/>pend_ini"]
-    LST(["i_letra_lista"]) --> LATCHL["FF set/clear<br/>pend_letra"]
-    PULSOF --> LATCHF["FF set/clear<br/>pend_fin"]
+El esquemático sale de sintetizar el `.sv` con yosys, bajarlo a AND, OR, XOR, NOT, MUX y flip-flops D
+con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima el nombre de la señal que
+produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
+para el reset y los `if` de cada registro.
 
-    LATCHF --> PRIO["codificador de<br/>prioridad<br/>(fin > letra > inicio)"]
-    LATCHL --> PRIO
-    LATCHI --> PRIO
-    PRIO --> SELTRAMA["sel_trama"]
+Arriba está el transmisor con `DETECTOR` (líneas 48 a 63), la máquina de estados `FSM_ESTADO`
+(132 a 149), `CNT_BYTE` (151 a 155), `CARGA_TRAMA` (158 a 181) y `SALIDAS` (184 a 201). Las banderas
+pendientes de las líneas 78 a 120 están partidas por registro, `PENDIENTES_PEND_INI`,
+`PENDIENTES_PEND_LETRA`, `PENDIENTES_PEND_FIN` y los valores capturados, y lo que usan varios, como
+`hay_pendiente` y `consumir`, queda en `PENDIENTES_COMUN`. Los cables `n1`, `n2` y demás son
+decodificaciones del estado que no tienen nombre en el RTL.
 
-    S1Q["S1 (Q)"] --> NSL["Lógica de<br/>siguiente estado"]
-    S0Q["S0 (Q)"] --> NSL
-    SELTRAMA --> NSL
-    RDATA(["i_rdata[0]<br/>(send)"]) --> NSL
-    LIBRE(["i_bus_libre"]) --> NSL
-    BYTEFIN(["CNT_BYTE = LEN-1"]) --> NSL
-    NSL --> D1["D-FF S1"]
-    NSL --> D2["D-FF S0"]
-    CLK --> D1
-    CLK --> D2
-    D1 --> S1Q
-    D2 --> S0Q
-    S1Q --> DEC["DECOD 2:4<br/>(estados)"]
-    S0Q --> DEC
-    DEC --> WEO["o_write_enable"]
-    DEC --> ADDRSEL["MUX o_addr<br/>(TX / CTRL)"]
-    DEC --> CTENBYTE["enable CONT_BYTE"]
+Se genera con `WIDTH = 8` y `WORD_MAXLEN = 4`. `reg_trama` se sintetiza con `mem2reg` para que salga
+como flip-flops, sin eso yosys la deja como una memoria que no se abre a compuertas. `SALIDAS` es el bloque más grande porque elige uno de
+los cinco bytes de `reg_trama` con `cnt_byte`.
 
-    SELTRAMA --> MUXFRAME{{"MUX<br/>REG_TRAMA/REG_LEN"}}
-    VALS(["i_modo, i_word_length,<br/>i_letra_state, i_intentos, i_mascara"]) --> MUXFRAME
-    MUXFRAME --> RFRAME["D-FF (bus)<br/>REG_TRAMA + REG_LEN"]
-    CLK --> RFRAME
-    RFRAME --> MUXBYTE{{"MUX byte<br/>por CNT_BYTE"}}
-    CTENBYTE --> CNTBYTE["CONT_BYTE"]
-    CLK --> CNTBYTE
-    CNTBYTE --> MUXBYTE
-    MUXBYTE --> WDATAO["o_wdata"]
-```
-
-`clk` y `rst` entran a todo registro y contador del módulo aunque no se dibujen en cada elemento.
-`rst` fuerza el estado a IDLE, limpia las tres banderas `pend_*` y pone `o_write_enable` en cero,
-así que después de un reset el módulo queda mudo hasta el siguiente evento.
+`cnt_byte == reg_len - 1` se dibuja con `reg_len - 3'd1`. En el `.sv` el `1` no tiene tamaño, cuenta
+como entero de 32 bits y yosys arma la resta y la comparación en 32 bits aunque `reg_len` sea de 3.
+TODO: Revisar si se cambia a `reg_len - 3'd1` en las dos líneas donde aparece (141 y 154).
 
 ## j) Diagrama completo de conexiones del diseño
 
