@@ -102,30 +102,25 @@ Todos los bloques son `always_ff` con reset síncrono. Sintetizado con yosys den
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    CNT["CONTADOR<br/>cuenta_tick, TICKS_X16 - 1 a 0"] -->|tick_x16| FSM
+![Esquemático por compuertas de NUCLEO_UART_RX](../diagramas/uart_rx.png)
 
-    IN_RX(["i_rx"]) --> FSM["FSM<br/>REPOSO / ARRANQUE / DATOS / PARADA"]
-    FSM <-->|"cuenta_bit, 0 a 15"| CB["CONTADOR<br/>cuenta_bit"]
-    FSM <-->|"indice_bit, 0 a 7"| IB["CONTADOR<br/>indice_bit"]
+El esquemático sale de sintetizar el `.sv` con yosys, bajarlo a AND, OR, XOR, NOT, MUX y flip-flops D
+con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima el nombre de la señal que
+produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
+para el reset y los `if` de cada registro.
 
-    IN_RX --> SR["REG_DATO_PARCIAL<br/>8 bits, carga por bit"]
-    IB -->|selección de bit| SR
-    FSM -->|muestrear| SR
+Arriba está el núcleo con `DIVISOR` y `DETECTOR_FIN`, uno por `always` del `.sv`. La máquina de estados
+está partida por registro, `FSM_ESTADO`, `FSM_CUENTA_BIT`, `FSM_INDICE_BIT`, `FSM_DATO_PARCIAL`,
+`FSM_O_DATO` y `FSM_FIN_RX`, y las comparaciones que usan varios de ellos quedan en `FSM_COMUN` con
+salidas como `estado==DATOS` o `cuenta_bit==15`. Abajo está cada bloque abierto a compuertas.
 
-    SR --> OUT_REG["REG_DATO<br/>o_dato, 8 bits"]
-    FSM -->|cargar| OUT_REG
-    OUT_REG --> OUT_D(["o_dato[7:0]"])
+Se genera con `TICKS_X16 = 4`, dato de 2 bits e `indice_bit` de 1 bit. Con los valores reales cambia el
+ancho de los contadores y la cantidad de copias por bit de dato, no la estructura.
 
-    FSM -->|fin_rx| FF["FF<br/>fin_rx_prev"]
-    FSM -->|fin_rx| AND["AND<br/>fin_rx y no fin_rx_prev"]
-    FF --> AND
-    AND --> FFO["FF"]
-    FFO --> OUT_L(["o_dato_listo"])
-```
-
-`clk` y `rst` entran a todos los flip-flops aunque no se dibujen.
+`cuenta_tick`, `cuenta_bit` e `indice_bit` se dibujan de 2, 4 y 1 bits. En el `.sv` están declarados
+como `int`, y yosys los sintetiza como contadores de 32 bits aunque no pasen de 53, 15 y 7. Con esos
+tres en 32 bits la máquina de estados sola da más de 800 compuertas. TODO: Revisar si se cambian a
+`logic` con el ancho justo.
 
 ## j) Diagrama completo de conexiones del diseño
 

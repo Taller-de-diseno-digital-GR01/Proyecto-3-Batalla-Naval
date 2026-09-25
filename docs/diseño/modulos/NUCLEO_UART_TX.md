@@ -117,32 +117,23 @@ solo se lee después de una captura. Sintetizado con yosys dentro de `periferico
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    CNT["CONTADOR<br/>cuenta_tick, TICKS_BIT - 1 a 0"] -->|tick_bit| FSM
-    CNT -->|tick_bit| IDX["CONTADOR<br/>indice, 3 bits"]
+![Esquemático por compuertas de NUCLEO_UART_TX](../diagramas/uart_tx.png)
 
-    EN(["i_enviar"]) --> CAP["REG_ARRANQUE<br/>arranque_pedido"]
-    DATO(["i_dato[7:0]"]) --> GUARD["REG_DATO<br/>dato_guardado, 8 bits"]
-    CAP -->|carga| GUARD
-    CAP -->|arranque_pedido| FSM["FSM<br/>REPOSO / ARRANQUE / DATOS / PARADA"]
-    FSM -->|limpiar_arranque| CAP
-    FSM -->|indice_en_pausa| IDX
+El esquemático sale de sintetizar el `.sv` con yosys, bajarlo a AND, OR, XOR, NOT, MUX y flip-flops D
+con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima el nombre de la señal que
+produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
+para el reset y los `if` de cada registro.
 
-    GUARD --> MUX{{"MUX 8 a 1"}}
-    IDX -->|indice| MUX
-    IDX -->|"indice = 7"| FSM
-    MUX --> FSM
-    FSM --> OUT_TX(["o_tx"])
+Arriba está el núcleo con un bloque por `always` del `.sv`, `DIVISOR`, `CAPTURA`, `CONT_INDICE` y
+`DETECTOR_FIN`. La máquina de estados está partida por registro, `FSM_ESTADO`, `FSM_O_TX`, `FSM_FIN_TX`,
+`FSM_LIMPIAR_ARRANQUE` y `FSM_INDICE_EN_PAUSA`, y la decodificación del estado que usan todos queda en
+`FSM_COMUN` con salidas como `estado==DATOS`. Abajo está cada bloque abierto a compuertas.
 
-    FSM -->|fin_tx| FF["FF<br/>fin_tx_prev"]
-    FSM -->|fin_tx| AND["AND<br/>fin_tx y no fin_tx_prev"]
-    FF --> AND
-    AND --> FFO["FF"]
-    FFO --> OUT_L(["o_listo"])
-```
+Se genera con `TICKS_BIT = 4`, dato de 2 bits e `indice` de 1 bit. Con los valores reales cambia el
+ancho de los contadores y la cantidad de copias del mux de datos, no la estructura.
 
-`clk` y `rst` entran a todos los flip-flops aunque no se dibujen.
+`cuenta_tick` se dibuja de 2 bits. En el `.sv` está declarado como `int`, y yosys lo sintetiza como un
+contador de 32 bits aunque nunca pase de 867. TODO: Revisar si se cambia a `logic [$clog2(TICKS_BIT)-1:0]`.
 
 ## j) Diagrama completo de conexiones del diseño
 
