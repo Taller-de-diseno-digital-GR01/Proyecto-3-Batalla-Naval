@@ -165,34 +165,20 @@ byte por sondear demasiado lento.
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    BUS(["i_rdata (bus 32b)"]) --> REG_RX["REG_LETRA<br/>registro de dato"]
-    BUS --> BIT_NRX["SEL_BIT<br/>new_rx"]
+![Esquemático por compuertas de UART_receptor](../diagramas/receptor_uart.png)
 
-    BUS --> CMP_LO{"CMP >= 0x41"}
-    BUS --> CMP_HI{"CMP <= 0x5A"}
-    CMP_LO --> AND_RNG["AND<br/>en rango A-Z"]
-    CMP_HI --> AND_RNG
+El esquemático sale de sintetizar el `.sv` con yosys, bajarlo a AND, OR, XOR, NOT, MUX y flip-flops D
+con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima el nombre de la señal que
+produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
+para el reset y los `if` de cada registro.
 
-    ST(["i_state"]) --> CMP_JG{"CMP = JUEGO"}
+Arriba está el receptor con `FILTRO` (las líneas 29 y 30, `new_rx` y `en_rango`), la máquina de
+estados y `SALIDAS` de las líneas 56 a 64. El `always_ff` de las líneas 33 a 53 está partido por
+registro, `FSM_BUS_ESTADO`, `FSM_BUS_O_LETRA` y `FSM_BUS_O_VALID_W`. El cable `n1` es la decodificación
+de `estado == LEE` que arma `SALIDAS` y que también usan los registros.
 
-    BIT_NRX --> FSM_BUS["FSM_BUS<br/>ESPERA / LEE / LIMPIA"]
-    FSM_BUS -->|"estado = LEE"| AND_VAL["AND<br/>acepta la letra"]
-    AND_RNG --> AND_VAL
-    CMP_JG --> AND_VAL
-    FSM_BUS -->|"carga en LEE"| REG_RX
-
-    AND_VAL --> REG_VW["REG_VALID<br/>registro"]
-    REG_VW --> OUT_VW(["o_valid_w"])
-    REG_RX --> OUT_LETRA(["o_letra"])
-
-    FSM_BUS --> OUT_ADDR(["o_addr[1:0]"])
-    FSM_BUS --> OUT_WE(["o_write_enable"])
-    FSM_BUS --> OUT_WD(["o_wdata (ceros)"])
-```
-
-`clk` y `rst` entran a `REG_LETRA`, a `REG_VALID` y a `FSM_BUS` aunque no se dibujen.
+Se genera con `WIDTH = 8`. De `i_rdata` solo se usan los 8 bits bajos, y `o_wdata` siempre vale cero,
+así que el bus de 32 bits solo agrega cables que no llevan a ninguna compuerta.
 
 ## j) Diagrama completo de conexiones del diseño
 
