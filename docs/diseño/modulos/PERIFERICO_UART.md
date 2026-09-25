@@ -207,40 +207,22 @@ reset síncrono. Sintetizado con yosys (`synth -top periferico_uart`) no aparece
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    ADDR(["addr_i[1:0]"]) --> DEC["DECOD_DIR<br/>ctrl / tx / rx"]
-    WE(["write_enable_i"]) --> DEC
+![Esquemático por compuertas de PERIFERICO_UART](../diagramas/periferico_uart.png)
 
-    WDATA(["wdata_i[31:0]"]) --> REG_TX["REG_DATOS_TX<br/>registro 8b"]
-    DEC --> REG_TX
-    WDATA --> REG_CTRL["REG_CONTROL<br/>registro 32b<br/>[0] send, WC<br/>[1] new_rx, RW<br/>[31:2] en cero"]
-    DEC --> REG_CTRL
-    WDATA --> REG_RX["REG_DATOS_RX<br/>registro 8b"]
-    DEC --> REG_RX
+El esquemático sale de sintetizar el `.sv` con yosys, bajarlo a AND, OR, XOR, NOT, MUX y flip-flops D
+con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima el nombre de la señal que
+produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
+para el reset y los `if` de cada registro.
 
-    REG_TX --> NUC_TX["uart_tx<br/>TICKS_BIT = 868"]
-    REG_CTRL -->|"[0] send"| NUC_TX
-    NUC_TX --> OUT_TX(["tx_o"])
-    NUC_TX -->|o_listo| REG_CTRL
+Arriba está el periférico con los dos núcleos y los cuatro bloques del nivel 3 como cajas. Cada bloque
+sale de un `always` del `.sv`, `REG_DATOS_TX` de las líneas 50 a 53, `REG_DATOS_RX` de 55 a 59,
+`REG_CONTROL` de 61 a 72 y `MUX_RD` de 74 a 81, y abajo está cada uno abierto a compuertas. Los núcleos
+se abren en sus propios docs.
 
-    IN_RX(["rx_i"]) --> NUC_RX["uart_rx<br/>TICKS_X16 = 54"]
-    NUC_RX -->|o_dato| REG_RX
-    NUC_RX -->|o_dato_listo| REG_CTRL
-    NUC_RX -->|o_dato_listo| REG_RX
-
-    REG_CTRL --> MUX_RD{{"MUX de lectura"}}
-    REG_TX --> MUX_RD
-    REG_RX --> MUX_RD
-    DEC --> MUX_RD
-    MUX_RD --> OUT_RD(["rdata_o[31:0]"])
-```
-
-`clk_i` y `rst_i` entran a los tres registros y a los dos núcleos aunque no se dibujen.
-
-El método pide este esquemático por compuertas. Acá se deja en registros, comparadores y un
-multiplexor, porque cada uno de esos bloques sale directo de una línea del `.sv` y yosys es el que lo
-baja a compuertas y LUTs. Los núcleos se abren en sus propios docs.
+Se genera con el dato de 2 bits y el bus de 4 en vez de 8 y 32, porque con los anchos reales el mux de
+lectura solo ya no cabe en una página. Cada bit de dato repite la misma celda, así que lo que cambia
+con 8 bits es la cantidad de copias. Dentro de `MUX_RD` los bits altos de `reg_control` entran como
+cualquier otra señal, porque ahí adentro yosys no sabe que afuera valen cero.
 
 ## j) Diagrama completo de conexiones del diseño
 
