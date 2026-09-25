@@ -153,38 +153,19 @@ ramas del if, sin caminos sin cubrir. `make synth SYNTH_TOP=arbitro_uart` pasa s
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    RXA(["i_rx_addr, i_rx_we"]) --> CMP_RX{"CMP<br/>rx_pide"}
-    TXA(["i_tx_addr, i_tx_we"]) --> CMP_TX{"CMP<br/>tx_pide"}
+![Esquemático por compuertas de ARBITRO_UART](../diagramas/arbitro_uart.png)
 
-    CMP_RX --> MUX_BUS{{"MUX de peticion<br/>rx / tx / reposo"}}
-    CMP_TX --> MUX_BUS
-    RXW(["i_rx_wdata"]) --> MUX_BUS
-    TXW(["i_tx_wdata"]) --> MUX_BUS
+El esquemático sale de sintetizar el `.sv` con yosys, bajarlo a AND, OR, XOR, NOT, MUX y flip-flops D
+con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima el nombre de la señal que
+produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
+para el reset y los `if` de cada registro.
 
-    CMP_RX --> COMP["RECOMP_CTRL<br/>arma send y new_rx"]
-    RXW --> COMP
-    TXW --> COMP
-    RD(["i_rdata (del periferico)"]) --> COMP
+Arriba está el árbitro con un bloque por cada parte del `.sv`, `PETICION` de las líneas 31 a 34,
+`RECOMP_CTRL` de 37 a 40, `MUX_BUS` de 45 a 63 y `MUX_RDATA` de 66 a 67, y abajo está cada uno abierto a
+compuertas. Es todo combinacional, no hay ni un flip-flop.
 
-    COMP --> MUX_WD{{"MUX de wdata<br/>control / datos"}}
-    MUX_BUS --> MUX_WD
-    MUX_WD --> OUT_WD(["o_wdata"])
-    MUX_BUS --> OUT_ADDR(["o_addr"])
-    MUX_BUS --> OUT_WE(["o_we"])
-
-    CMP_RX --> GATE_RX["AND<br/>rdata al receptor"]
-    CMP_TX --> GATE_RX
-    RD --> GATE_RX
-    GATE_RX --> OUT_RXD(["o_rx_rdata"])
-
-    CMP_RX --> GATE_TX["AND<br/>rdata al transmisor"]
-    RD --> GATE_TX
-    GATE_TX --> OUT_TXD(["o_tx_rdata"])
-
-    CMP_RX --> OUT_LIBRE(["o_tx_bus_libre"])
-```
+Se genera con el bus de 4 bits en vez de 32. Los bits de `o_wdata` y de las dos lecturas repiten la
+misma celda, así que con 32 bits cambia la cantidad de copias y no la estructura.
 
 ## j) Diagrama completo de conexiones del diseño
 
