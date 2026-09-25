@@ -17,7 +17,9 @@ for k, c in cells.items():
 dueno = {}
 for k, c in cells.items():
     if c['type'] not in ('$dff', '$adff', '$sdff', '$dffe', '$sdffe'): continue
-    reg = nombre.get(c['connections']['Q'][0], k).upper()
+    q = c['connections']['Q']
+    # con nombre exacto primero, si no un alias como mascara_ext = {0, pend_mascara_val} se lleva el registro
+    reg = next((n for n, info in m['netnames'].items() if info['bits'] == q and not n.startswith('$')), nombre.get(q[0], k)).upper()
     pila, vistos = [k], set()
     while pila:
         x = pila.pop()
