@@ -88,6 +88,18 @@ La nota más grave de `ROM_NOTAS` es A3 a 220 Hz, con `N = 100e6 / (2 x 220) - 1
 pide 18 bits, y `2^18 = 262144` deja espacio para bajar hasta unos 191 Hz sin cambiar el ancho. Si
 se agrega una nota más grave, `ANCHO_N` sube junto con `ROM_NOTAS`.
 
+### Estructura del RTL
+
+El contador y el comparador van como submódulos instanciados, `u_cont` (`contador_limpiable`) y
+`u_cmp` (`comparador_mayor_igual`), en vez de quedar dentro de un solo `always_ff`. Así el esquemático
+del inciso i) conserva los mismos bloques que la tabla de arriba, y yosys no los aplana en una sola
+maraña de compuertas.
+
+- `apagado = rst | ~i_sonar`, limpia contador y `reg_onda`.
+- `fin_medio_periodo`, salida de `u_cmp`, es `cont_divisor >= i_n`.
+- `u_cont` se limpia con `apagado | fin_medio_periodo` y si no suma uno.
+- `reg_onda` pasa a `reg_onda ^ fin_medio_periodo`, o a cero con `apagado`.
+
 ### Latches
 
 Un solo `always_ff` con reset síncrono y un `assign` para la salida. No hay `always_comb`, así que no
@@ -95,20 +107,17 @@ hay por dónde se cuele un latch.
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    N(["i_n[17:0]"]) --> CMP["COMPARADOR<br/>cont_divisor >= i_n"]
-    CNT["CONTADOR<br/>cont_divisor, 18 bits"] --> CMP
-    CMP -->|fin_medio_periodo| CNT
-    CMP -->|fin_medio_periodo| FF["FF T<br/>reg_onda"]
-    SON(["i_sonar"]) -->|"limpia en 0"| CNT
-    SON -->|"limpia en 0"| FF
-    FF --> AND["AND"]
-    SON --> AND
-    AND --> OUT(["o_sound"])
-```
+![Esquemático por compuertas de generador_tono](../diagramas/generador_tono.png)
 
-`clk` y `rst` entran a los dos flip-flops aunque no se dibujen.
+El esquemático sale de sintetizar el módulo con yosys, bajarlo a AND, OR, XOR, NOT y flip-flops D con
+`abc`, y dibujarlo con netlistsvg. Se genera con `ANCHO_N = 3` porque con 18 bits el dibujo no se
+puede leer. Con más bits el contador y el comparador repiten la misma celda por bit, y lo que está
+fuera de ellos no cambia.
+
+Arriba está el módulo con `u_cont` y `u_cmp` como cajas. Abajo está cada uno abierto a compuertas.
+Cada compuerta o flip-flop lleva encima el nombre de la señal que produce cuando esa señal tiene
+nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma para el reset y el `if` de
+cada registro.
 
 ## j) Diagrama completo de conexiones del diseño
 
