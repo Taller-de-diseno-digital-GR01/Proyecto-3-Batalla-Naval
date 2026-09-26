@@ -1,5 +1,7 @@
 
 
+# Nivel 3
+
 ## Diagrama de tercer nivel
 
 ```mermaid
@@ -22,18 +24,18 @@ flowchart TD
         DIR -->|"selección del destino"| RMUX
     end
 
-    subgraph GPIO["ENTRADAS - propuesta"]
-        SYNC["Sincronización"] --> DB["Filtro de rebotes"] --> BTNREG["Registro de botones"]
+    subgraph GPIO["PERIFERICO_ENTRADAS"]
+        BTNREG["REG_ESTADO<br/>botones_i[6:0]"]
     end
 
-    subgraph PUART["PERIFERICO_UART - feature/uart"]
-        DEC_UART["Selección de registro<br/>addr_i"]
-        REG_CTRL["reg_control<br/>send, new_rx"]
-        REG_TX["reg_tx"]
-        REG_RX["reg_rx"]
-        MUX_UART["MUX de lectura<br/>rdata_o"]
-        TX["uart_tx"]
-        RX["uart_rx"]
+    subgraph PUART["PERIFERICO_UART"]
+        DEC_UART["DECOD_DIR<br/>addr_i vs 00 / 01 / 10"]
+        REG_CTRL["REG_CONTROL<br/>[0] send, [1] new_rx"]
+        REG_TX["REG_DATOS_TX<br/>8 bits"]
+        REG_RX["REG_DATOS_RX<br/>8 bits"]
+        MUX_UART["MUX_RD<br/>rdata_o"]
+        TX["NUCLEO_UART_TX<br/>uart_tx, TICKS_BIT = 868"]
+        RX["NUCLEO_UART_RX<br/>uart_rx, TICKS_X16 = 54"]
         DEC_UART --> REG_CTRL
         DEC_UART --> REG_TX
         DEC_UART --> REG_RX
@@ -81,11 +83,11 @@ flowchart TD
     TX -->|"tx_o"| APP
 ```
 
-El procesador aparece como **un solo bloque**, sin mostrar sus partes internas. ROM y RAM son bloques separados: ROM entrega instrucciones directamente al procesador y RAM comparte el camino de datos con los periféricos. Dentro de `CONTROLADOR_MAPEO` se muestran la decodificación, el comparador de UART, la habilitación de escritura y el multiplexor de lectura; son **conexiones propuestas**, aún sin RTL de integración. Los registros y núcleos UART sí corresponden al código de `feature/uart`. `clk_i` y `rst_i` llegan al periférico UART, aunque no se repitan en cada registro del dibujo.
+El procesador aparece como **un solo bloque**, sin mostrar sus partes internas. ROM y RAM son bloques separados: ROM entrega instrucciones directamente al procesador y RAM comparte el camino de datos con los periféricos. Dentro de `CONTROLADOR_MAPEO` se muestran la decodificación, el comparador de UART, la habilitación de escritura y el multiplexor de lectura; son **conexiones propuestas**, aún sin RTL de integración. Los registros y núcleos de `PERIFERICO_UART` sí corresponden a `src/design/periferico_uart.sv`, `uart_tx.sv` y `uart_rx.sv`. `clk_i` y `rst_i` llegan al periférico UART, aunque no se repitan en cada registro del dibujo.
 
 ## Observaciones de integración
 
-- **Entradas.** Se propone sincronizar y filtrar los botones antes de exponer su estado en un registro. El programa decide cómo usar cada pulsación.
+- **Entradas.** Los botones se registran y se exponen en un solo registro de lectura, sin antirrebote en hardware. El programa saca los flancos y decide cómo usar cada pulsación. El detalle está en [`PERIFERICO_ENTRADAS.md`](../modulos/PERIFERICO_ENTRADAS.md).
 - **Display y LED.** Se proponen registros mapeados para el contador de victorias y la fase del juego, más un selector de dígito y un decodificador de segmentos. La distribución concreta de bits sigue pendiente.
 - **Buzzer.** Se propone un registro para seleccionar el evento y un generador de tono. El programa determina qué evento ocurrió.
 - **Aplicación de PC.** Envía y recibe bytes por UART; la interpretación de colocaciones, turnos y disparos corresponde al programa ejecutado por el procesador. El periférico UART solo transporta bytes.
@@ -94,7 +96,7 @@ El procesador aparece como **un solo bloque**, sin mostrar sus partes internas. 
 
 Este bloque se sitúa entre el bus de datos del procesador y la RAM o los periféricos. Recibe `DataAddress_o`, `DataOut_o` y `we_o`; devuelve por `DataIn_i` el dato del destino seleccionado. La ROM de programa usa su propio camino hacia el procesador y no pasa por este controlador. La lógica del controlador **solo encamina accesos**: no decide turnos, disparos ni resultados del juego.
 
-El decodificador compara la dirección completa con el mapa de memoria y genera una selección para un único destino. La RAM ocupa `0x0000_2000`–`0x0000_2FFF`; UART, `0x0001_0040`–`0x0001_004F`; y VGA, `0x0001_1000`–`0x0001_17FF`. Los registros de botones, display, LED y buzzer se seleccionan en sus direcciones respectivas. En particular, display (`0x0001_0130`) y LED (`0x0001_0138`) **no** pueden distinguirse comparando solo `DataAddress_o[31:4]`, porque comparten esos bits altos.
+El decodificador compara la dirección completa con el mapa de memoria y genera una selección para un único destino. La RAM ocupa `0x0000_2000`–`0x0000_2FFF`; UART, `0x0001_0040`–`0x0001_004F`; y VGA, `0x0001_1000`–`0x0001_17FF`. Los registros de botones, display, LED y buzzer se seleccionan en sus direcciones respectivas. En particular, display (`0x0001_0130`) y LED (`0x0001_0138`) **no** pueden distinguirse comparando solo `DataAddress_o[31:4]`, porque comparten esos bits altos. Por eso los dos comparan `DataAddress_o[31:3]`, y al LED le llega `addr_i = {1'b0, DataAddress_o[2]}` para que `0x0001_0138` entre como `2'b00`. El detalle está en `PERIFERICO_7SEG.md` y `PERIFERICO_LED.md`.
 
 En una escritura, `DataOut_o` llega al destino, pero su habilitación se activa únicamente cuando coinciden `we_o` y la señal de selección correspondiente. Para UART se propone `write_enable_i = we_o && sel_uart`, donde `sel_uart` resulta de comparar `DataAddress_o[31:4]` con `0x0001004`; `DataAddress_o[3:2]` escoge internamente los registros de control, TX o RX mediante `addr_i[1:0]`. El controlador debe generar habilitaciones equivalentes e independientes para RAM y los demás destinos, evitando que un `sw` a uno modifique otro.
 
@@ -102,15 +104,77 @@ En una lectura, `MUX_LECTURA` selecciona el dato de RAM o la salida `rdata_o` de
 
 ## PERIFERICO_UART
 
-El bloque sigue [`src/design/periferico_uart.sv`](https://github.com/Taller-de-diseno-digital-GR01/Proyecto-3-Batalla-Naval/blob/feature/uart/src/design/periferico_uart.sv) y sus dos submódulos [`uart_tx.sv`](https://github.com/Taller-de-diseno-digital-GR01/Proyecto-3-Batalla-Naval/blob/feature/uart/src/design/uart_tx.sv) y [`uart_rx.sv`](https://github.com/Taller-de-diseno-digital-GR01/Proyecto-3-Batalla-Naval/blob/feature/uart/src/design/uart_rx.sv).
+El bloque sigue [`periferico_uart.sv`](../../../src/design/periferico_uart.sv) y sus dos submódulos [`uart_tx.sv`](../../../src/design/uart_tx.sv) y [`uart_rx.sv`](../../../src/design/uart_rx.sv). La ficha completa, con los puntos a) a j), está en [`PERIFERICO_UART.md`](../modulos/PERIFERICO_UART.md).
 
-- **Interfaz del bus:** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Los pines seriales son `rx_i` y `tx_o`.
-- **Selección interna:** `addr_i=00` selecciona `reg_control` en `0x0001_0040`; `01` selecciona `reg_tx` en `0x0001_0044`; `10` selecciona `reg_rx` en `0x0001_0048`. La combinación `11` no está asignada, devuelve cero al leer y no escribe ningún registro.
-- **Transmisión:** el programa escribe un byte en `reg_tx` y luego pone `reg_control[0]` (`send`) en uno. `uart_tx` toma el byte, lo transmite y emite `o_listo`; el registro baja `send` al terminar. El núcleo TX usa `TICKS_BIT=868` como valor predeterminado para el reloj de 100 MHz y 115200 baudios.
-- **Recepción:** `uart_rx` reconstruye el byte entrante con sobremuestreo, lo entrega como `o_dato` y pulsa `o_dato_listo`. Entonces se carga `reg_rx` y sube `reg_control[1]` (`new_rx`). Tras leer el byte, el programa limpia esa bandera escribiendo cero en el bit 1 del registro de control. El núcleo RX usa `TICKS_X16=54` de forma predeterminada.
-- **Lectura:** `rdata_o` selecciona combinacionalmente control, TX o RX y extiende a 32 bits los bytes de datos. Un nuevo byte recibido tiene prioridad frente a una escritura del CPU a `reg_rx` o al bit `new_rx` en el mismo ciclo.
+- **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Los pines seriales son `rx_i` (B18) y `tx_o` (A18).
+- **Selección.** El controlador compara `DataAddress_o[31:4]` con `0x0001004` para obtener `sel_uart`, la escritura se habilita con `write_enable_i = we_o && sel_uart`, y `DataAddress_o[3:2]` llega como `addr_i`. Se comparan los 28 bits altos y no solo algunos, para que la UART no aparezca repetida en otras direcciones del espacio de periféricos.
 
-Los archivos `arbitro_uart.sv`, `receptor_uart.sv` y `transmisor_uart.sv` también aparecen en la rama, pero proceden del Proyecto 2: el diseño documentado para Proyecto 3 tiene **un único maestro del periférico, el procesador**, y no coloca ese árbitro entre CPU y UART. El periférico todavía no aparece instanciado en un `top.sv` del sistema completo.
+`escribir_tx`, `escribir_ctrl` y `escribir_rx` no son señales con nombre en el `.sv`, son las condiciones `write_enable_i && addr_i == ...` de cada `always_ff`.
+
+### DECOD_DIR
+
+Elige cuál de los tres registros recibe una escritura.
+
+- Entradas, `write_enable_i` y `addr_i[1:0]`.
+- Salidas, las habilitaciones de escritura de `REG_DATOS_TX` (`2'b01`), `REG_CONTROL` (`2'b00`) y `REG_DATOS_RX` (`2'b10`).
+
+Son tres comparaciones de `addr_i` contra `ADDR_DATOS_TX`, `ADDR_CONTROL` y `ADDR_DATOS_RX`, cada una en AND con `write_enable_i`. La dirección `2'b11` no habilita nada.
+
+### REG_DATOS_TX
+
+Guarda el byte que el programa quiere mandar, en `0x0001_0044`.
+
+- Entradas, `wdata_i[7:0]` y la habilitación de `DECOD_DIR`.
+- Salidas, `reg_tx[7:0]` hacia `NUCLEO_UART_TX` y `MUX_RD`.
+
+Registro de 8 bits con reset síncrono. Solo cambia cuando el programa lo escribe.
+
+### REG_CONTROL
+
+Lleva las dos banderas que el programa sondea en `0x0001_0040`, `send` en el bit 0 y `new_rx` en el bit 1.
+
+- Entradas, `wdata_i[1:0]`, la habilitación de `DECOD_DIR`, `o_listo` de `NUCLEO_UART_TX` y `o_dato_listo` de `NUCLEO_UART_RX`.
+- Salidas, `reg_control[0]` (`send`) hacia `i_enviar` de `NUCLEO_UART_TX`, y `reg_control[31:0]` hacia `MUX_RD`.
+
+Registro de 32 bits donde solo los bits 0 y 1 tienen lógica, el resto queda en cero desde el reset. `send` sube cuando el programa escribe un 1 en el bit 0 y baja solo con `o_listo`. `new_rx` sube con `o_dato_listo` y toma el valor de `wdata_i[1]` en cualquier escritura al control, y un byte que llega le gana a la escritura del mismo ciclo. Como una escritura para arrancar un envío también escribe `new_rx`, el programa sigue el orden de [Cómo usa la ROM el periférico](#cómo-usa-la-rom-el-periférico).
+
+### REG_DATOS_RX
+
+Guarda el último byte que llegó por `rx_i`, en `0x0001_0048`.
+
+- Entradas, `o_dato[7:0]` y `o_dato_listo` de `NUCLEO_UART_RX`, `wdata_i[7:0]` y la habilitación de `DECOD_DIR`.
+- Salidas, `reg_rx[7:0]` hacia `MUX_RD`.
+
+Registro de 8 bits que carga `o_dato` cuando llega `o_dato_listo`. También se puede escribir por el bus, pero el byte que llega del núcleo tiene prioridad.
+
+### MUX_RD
+
+Pone en `rdata_o` el registro que apunta `addr_i`.
+
+- Entradas, `addr_i[1:0]`, `reg_control`, `reg_tx` y `reg_rx`.
+- Salidas, `rdata_o[31:0]` hacia `MUX_LECTURA`.
+
+Multiplexor combinacional de cuatro entradas. Los registros de 8 bits se rellenan con ceros a 32, y `2'b11` devuelve cero. Como es combinacional, un `lw` a la UART tiene su dato en el mismo ciclo en que el procesador pone la dirección.
+
+### NUCLEO_UART_TX
+
+Suelta por `tx_o` el byte de `REG_DATOS_TX` en formato 8N1 a 115200 baudios.
+
+- Entradas, `i_enviar`, que es `send`, e `i_dato[7:0]`.
+- Salidas, `o_tx` hacia el pin A18, y `o_listo`, pulso de un ciclo al terminar, hacia `REG_CONTROL`.
+
+Divisor de baudaje de 868 ciclos, una máquina de cuatro estados que recorre arranque, ocho datos y parada, y un detector de flanco que produce `o_listo`. El detalle está en [`NUCLEO_UART_TX.md`](../modulos/NUCLEO_UART_TX.md).
+
+### NUCLEO_UART_RX
+
+Recupera los bytes que llegan por `rx_i`.
+
+- Entradas, `i_rx` desde el pin B18.
+- Salidas, `o_dato[7:0]` y `o_dato_listo`, pulso de un ciclo, hacia `REG_DATOS_RX` y `REG_CONTROL`.
+
+Sobremuestreo a 16 veces el baudaje con un divisor de 54 ciclos, una máquina de cuatro estados que cae al centro de cada bit, y un detector de flanco que produce `o_dato_listo`. El detalle está en [`NUCLEO_UART_RX.md`](../modulos/NUCLEO_UART_RX.md).
+
+Los archivos `arbitro_uart.sv`, `receptor_uart.sv` y `transmisor_uart.sv` también están en `src/design/`, pero proceden del Proyecto 2. El diseño del Proyecto 3 tiene **un único maestro del periférico, el procesador**, y no coloca ese árbitro entre CPU y UART. Sus docs en `../modulos/` quedan como referencia. El periférico todavía no aparece instanciado en un `top.sv` del sistema completo.
 
 ## VGA
 Este bloque corresponde al módulo que conecta al procesador (CPU) con el monitor mediante el estándar de video VGA. La ficha completa, con los puntos a) a j), está en [`modulos/PERIFERICO_VGA.md`](../modulos/PERIFERICO_VGA.md).
