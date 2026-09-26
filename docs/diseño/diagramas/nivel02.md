@@ -7,7 +7,7 @@ flowchart TD
     CLK(["clk 100 MHz"])
 
     subgraph FPGA
-        PLL["PLL<br/>reloj de pixel"]
+        MMCM["MMCM<br/>relojes del sistema y de pixel"]
         ROM["Memoria de programa<br/>ROM"]
         CPU["Procesador uniciclo<br/>RISC-V"]
         MAP["Controlador de mapeo"]
@@ -27,8 +27,8 @@ flowchart TD
     LED(["LED de estado"])
     ALTAVOZ(["Buzzer"])
 
-    CLK --> PLL
-    PLL -->|"clk_pix 25 MHz"| VGA
+    CLK --> MMCM
+    MMCM -->|"clk_pix 25 MHz"| VGA
     CPU -->|"ProgAddress_o"| ROM
     ROM -->|"ProgIn_i"| CPU
     CPU -->|"DataAddress_o, DataOut_o, we_o"| MAP
@@ -56,14 +56,14 @@ flowchart TD
 
 ## Descripciones
 
-`clk_i` de 100 MHz y `rst_i` llegan a todos los bloques, pero se omiten sus líneas repetidas para mantener legible el diagrama.
+`clk_i` de 100 MHz, que sale del MMCM, y `rst_i` llegan a todos los bloques, pero se omiten sus líneas repetidas para mantener legible el diagrama.
 
-### Bloque 1: PLL
+### Bloque 1: MMCM
 
-Saca el reloj de pixel de 25 MHz que pide el VGA a partir del único reloj de 100 MHz. Con openXC7 no hay asistente para generarlo, así que la primitiva se instancia a mano. El enunciado también deja abierta la opción de sacar del PLL un reloj para la UART, pero no hace falta, `PERIFERICO_UART` corre directo con los 100 MHz y saca los 115200 baudios con contadores internos. TODO: Revisar si se usa `PLLE2_BASE` o `MMCME2_BASE`.
+Saca del único reloj de 100 MHz los dos relojes del sistema, `clk_i` de 100 MHz para el procesador, las memorias y los periféricos, y `clk_pix` de 25 MHz para el VGA. Como los dos salen del mismo MMCM quedan relacionados en fase, que es lo que usa `PERIFERICO_VGA.md` para justificar el cruce de dominios. Con openXC7 no hay Clocking Wizard, así que la primitiva `MMCME2_BASE` se instancia a mano. El enunciado también deja abierta la opción de sacar un reloj aparte para la UART, pero no hace falta, `PERIFERICO_UART` usa los mismos 100 MHz de `clk_i` y saca los 115200 baudios con contadores internos. Si `clk_i` dejara de ser de 100 MHz habría que recalcular `TICKS_BIT` y `TICKS_X16`.
 
 - Entradas, `clk` de 100 MHz del pin W5.
-- Salidas, `clk_pix` de 25 MHz hacia `PERIFERICO_VGA`.
+- Salidas, `clk_i` de 100 MHz hacia todos los bloques y `clk_pix` de 25 MHz hacia `PERIFERICO_VGA`.
 
 ### Bloque 2: Procesador uniciclo
 
@@ -111,7 +111,7 @@ Mueve bytes entre el programa y la aplicación de PC, y es el único canal que t
 
 Lee su mapa de casillas para generar la imagen del Jugador 1 a 640 × 480 a 60 Hz. Se expone como una memoria de video en `0x0001_1000` a `0x0001_17FF`, una palabra por casilla de la cuadrícula. El procesador escribe por el reloj del sistema y la lógica de video lee por el reloj de pixel. El periférico genera los sincronismos y la imagen, sin aplicar reglas del juego. El detalle está en [`PERIFERICO_VGA.md`](../modulos/PERIFERICO_VGA.md).
 
-- Entradas, bus de memoria con `addr_i[8:0]`, y `clk_pix` del PLL.
+- Entradas, bus de memoria con `addr_i[8:0]`, y `clk_pix` del MMCM.
 - Salidas, `rdata_o[31:0]` hacia el multiplexor de lectura, y `vgaRed[3:0]`, `vgaGreen[3:0]`, `vgaBlue[3:0]`, `Hsync` y `Vsync`.
 
 ### Bloque 9: PERIFERICO_7SEG
