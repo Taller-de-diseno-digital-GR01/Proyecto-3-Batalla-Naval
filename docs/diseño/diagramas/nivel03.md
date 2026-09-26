@@ -131,25 +131,27 @@ Este bloque corresponde al módulo que conecta al procesador (CPU) con el monito
 
 El programa corre en `PROCESADOR_UNICICLO` desde la ROM y es el único lugar donde viven las reglas del juego. Los periféricos solo exponen entradas y salidas, y la aplicación de PC solo muestra lo que el programa le manda. En este nivel el programa se abre en cuatro diagramas de flujo: el flujo general, la fase de colocación, la fase de batalla y el fin de partida. Las cajas con nombre en mayúsculas (`NUEVA_PARTIDA`, `VALIDAR_COLOCACION`, `PROCESAR_DISPARO`) son subrutinas, y su detalle, junto con el armado de tramas UART, el cursor y la vista previa, va en el doc de nivel 4 del programa.
 
-### Restricciones del núcleo sobre el programa
+### El núcleo y lo que implica para el programa
 
-La lista base de instrucciones del instructivo condiciona cómo se escribe el programa:
+El procesador es el núcleo de ciclo único de [riscv-simple-sv](https://github.com/tilk/riscv-simple-sv). Implementa el conjunto `rv32i` completo salvo las instrucciones de sistema (`ecall`, `ebreak` y los CSR), y trata `fence` como una instrucción que no hace nada. Eso cubre la lista base del instructivo y además `lui`, `auipc`, las cargas y escrituras de byte y media palabra (`lb`, `lbu`, `lh`, `lhu`, `sb`, `sh`) y los saltos sin signo (`bltu`, `bgeu`). La extensión de multiplicación y división viene desactivada.
 
-- **No hay `lui` ni `auipc`.** `addi` carga constantes de −2048 a 2047, así que ninguna dirección de RAM ni de periférico cabe en una sola instrucción. Las direcciones se arman una vez al arrancar en registros base (tabla de abajo) y los accesos usan `lw`/`sw` con desplazamiento. Por la misma razón el programa no usa las pseudoinstrucciones `la`, `call` ni `li` con constantes grandes, y llama a las subrutinas con `jal ra, etiqueta`.
-- **No hay `lb` ni `sb`.** Todas las variables y las casillas de los tableros ocupan una palabra de 32 bits.
+Para el programa eso significa:
+
+- **Las direcciones se arman con `lui`.** Cada dirección base sale de una sola instrucción (tabla de abajo), y el programa puede usar `li`, `la` y `call` sin restricción.
+- **Los periféricos y la memoria de video se acceden solo con `lw` y `sw`.** El núcleo genera habilitaciones por byte para `sb` y `sh`, pero la interfaz estándar de periféricos del instructivo no las tiene. Un `sb` a un periférico escribiría la palabra entera con el dato desplazado. En la RAM las variables y las casillas también ocupan una palabra, para que todo el programa use las mismas dos instrucciones de memoria.
 - **No hay `mul`.** Los índices salen con desplazamientos: `fila × 8 = fila << 3` para los tableros y `fila × 20 = (fila << 4) + (fila << 2)` para la memoria de video.
-- **La ROM no está en el bus de datos.** El programa no puede leer tablas constantes de la ROM con `lw`. Las constantes van como inmediatos. La longitud de un barco, por ejemplo, sale de `4 − id` (4, 3 y 2 casillas para los id 0, 1 y 2).
+- **La ROM no está en el bus de datos.** El Address Translator no la mapea, así que el programa no puede leer tablas constantes de la ROM con `lw`. Las constantes van como inmediatos. La longitud de un barco, por ejemplo, sale de `4 − id` (4, 3 y 2 casillas para los id 0, 1 y 2).
 
 ### Registros base
 
 | Registro | Valor | Cómo se arma | Qué se alcanza con él |
 |---|---|---|---|
-| `s0` | `0x0001_0000` | `addi s0, x0, 1` y `slli s0, s0, 16` | Registros de periféricos, desplazamientos `0x040` a `0x140` |
-| `s1` | `0x0001_1000` | `addi s1, x0, 17` y `slli s1, s1, 12` | Memoria de video, casillas 0 a 299 (desplazamiento máximo 1196) |
-| `s2` | `0x0000_2000` | `addi s2, x0, 1` y `slli s2, s2, 13` | Variables en RAM, desplazamientos `0x000` a `0x7FF` |
-| `sp` | `0x0000_3000` | `addi sp, x0, 3` y `slli sp, sp, 12` | Tope de la pila, que crece hacia abajo |
+| `s0` | `0x0001_0000` | `lui s0, 0x10` | Registros de periféricos, desplazamientos `0x040` a `0x140` |
+| `s1` | `0x0001_1000` | `lui s1, 0x11` | Memoria de video, casillas 0 a 299 (desplazamiento máximo 1196) |
+| `s2` | `0x0000_2000` | `lui s2, 0x2` | Variables en RAM, desplazamientos `0x000` a `0x7FF` |
+| `sp` | `0x0000_3000` | `lui sp, 0x3` | Tope de la pila, que crece hacia abajo |
 
-Estos cuatro registros se cargan al arrancar y ninguna subrutina los modifica.
+Los desplazamientos de `lw` y `sw` son de 12 bits con signo (−2048 a 2047). Con estas bases todas las direcciones que usa el programa quedan dentro de ese alcance. Estos cuatro registros se cargan al arrancar y ninguna subrutina los modifica.
 
 | Acceso | Instrucción | Dirección |
 |---|---|---|
