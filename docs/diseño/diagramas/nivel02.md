@@ -3,233 +3,154 @@
 ## Diagrama de segundo nivel
 
 ```mermaid
-flowchart LR
-    CLK(["clk 100 MHz"]) --> PLL["PLL"]
-    PLL -->|clk_pixel 25 MHz| VGA
+flowchart TD
+    CLK(["clk 100 MHz"])
 
-    ROM["ROM<br/>programa"] -->|ProgIn_i| CPU["NUCLEO_RISCV<br/>rv32i"]
-    CPU -->|ProgAddress_o| ROM
+    subgraph FPGA
+        PLL["PLL<br/>reloj de pixel"]
+        ROM["Memoria de programa<br/>ROM"]
+        CPU["Procesador uniciclo<br/>RISC-V"]
+        MAP["Controlador de mapeo"]
+        RAM["Memoria de datos<br/>RAM"]
+        GPIO["PERIFERICO_ENTRADAS"]
+        UART["PERIFERICO_UART"]
+        VGA["PERIFERICO_VGA"]
+        DISP["PERIFERICO_7SEG"]
+        LEDP["PERIFERICO_LED"]
+        BUZ["PERIFERICO_BUZZER"]
+    end
 
-    CPU -->|"DataAddress_o, DataOut_o, we_o"| BUS["BUS_DATOS<br/>decodificador + mux de lectura"]
-    BUS -->|DataIn_i| CPU
+    PC["Aplicación de PC<br/>Jugador 2"]
+    BTN(["Botones del Jugador 1"])
+    MON(["Monitor VGA"])
+    SEG(["Display 7 segmentos"])
+    LED(["LED de estado"])
+    ALTAVOZ(["Buzzer"])
 
-    BUS <-->|bus RAM| RAM["RAM<br/>datos y pila"]
-    BUS <-->|"bus estándar, addr_i[1:0]"| UART["PERIFERICO_UART"]
-    BUS <-->|"bus de memoria, addr_i ancho"| VGA["PERIFERICO_VGA"]
-    BUS <-->|"bus estándar"| ENT["PERIFERICO_ENTRADAS"]
-    BUS <-->|"bus estándar"| SEG["PERIFERICO_7SEG"]
-    BUS <-->|"bus estándar"| LEDP["PERIFERICO_LED"]
-    BUS <-->|"bus estándar"| BUZP["PERIFERICO_BUZZER"]
-
-    BTN(["botones del Jugador 1"]) --> ENT
-    PC(["app de PC del Jugador 2"]) -->|rx| UART
-    UART -->|tx| PC
-    VGA --> MON(["monitor VGA"])
-    SEG --> DISP(["7 segmentos"])
-    LEDP --> LED(["LED de estado"])
-    BUZP --> BUZ(["buzzer"])
+    CLK --> PLL
+    PLL -->|"clk_pix 25 MHz"| VGA
+    CPU -->|"ProgAddress_o"| ROM
+    ROM -->|"ProgIn_i"| CPU
+    CPU -->|"DataAddress_o, DataOut_o, we_o"| MAP
+    MAP -->|"DataIn_i"| CPU
+    MAP <--> RAM
+    MAP <-->|"bus estándar, addr_i[1:0]"| GPIO
+    MAP <-->|"bus estándar, addr_i[1:0]"| UART
+    MAP <-->|"bus de memoria, addr_i[8:0]"| VGA
+    MAP <-->|"bus estándar, addr_i[1:0]"| DISP
+    MAP <-->|"bus estándar, addr_i[1:0]"| LEDP
+    MAP <-->|"bus estándar, addr_i[1:0]"| BUZ
+    BTN --> GPIO
+    PC <-->|"rx / tx"| UART
+    VGA --> MON
+    DISP --> SEG
+    LEDP --> LED
+    BUZ --> ALTAVOZ
 ```
 
-`clk_i` de 100 MHz y `rst_i` llegan a todos los bloques aunque no se dibujen. La app de PC queda
-afuera del sistema, se dibuja solo para mostrar de dónde vienen `rx` y `tx`.
+## Objetivos
 
-## PLL
+- Subdividir el sistema del nivel 1 en sus bloques principales, agrupando dentro de la FPGA el procesador, las memorias y los periféricos.
+- Distinguir el camino de instrucciones entre ROM y procesador del camino de datos que pasa por el controlador de mapeo.
+- Mostrar que la aplicación de PC es externa a la FPGA y se comunica exclusivamente mediante UART.
 
-Objetivo. Sacar el reloj de pixel de 25 MHz que pide el VGA a partir del único reloj de 100 MHz.
+## Descripciones
 
-Entradas.
+`clk_i` de 100 MHz y `rst_i` llegan a todos los bloques, pero se omiten sus líneas repetidas para mantener legible el diagrama.
 
-- `clk`, 100 MHz del pin W5.
+### Bloque 1: PLL
 
-Salidas.
+Saca el reloj de pixel de 25 MHz que pide el VGA a partir del único reloj de 100 MHz. Con openXC7 no hay asistente para generarlo, así que la primitiva se instancia a mano. El enunciado también deja abierta la opción de sacar del PLL un reloj para la UART, pero no hace falta, `PERIFERICO_UART` corre directo con los 100 MHz y saca los 115200 baudios con contadores internos. TODO: Revisar si se usa `PLLE2_BASE` o `MMCME2_BASE`.
 
-- `clk_pixel`, 25 MHz hacia `PERIFERICO_VGA`.
+- Entradas, `clk` de 100 MHz del pin W5.
+- Salidas, `clk_pix` de 25 MHz hacia `PERIFERICO_VGA`.
 
-Explicación general. Con openXC7 no hay asistente para generar el PLL, así que se instancia la
-primitiva a mano. El enunciado también deja abierta la opción de sacar del PLL un reloj para la UART,
-pero no hace falta. `PERIFERICO_UART` corre directo con los 100 MHz y saca los 115200 baudios con
-contadores internos. TODO: Revisar si se usa `PLLE2_BASE` o `MMCME2_BASE`.
+### Bloque 2: Procesador uniciclo
 
-## NUCLEO_RISCV
+Ejecuta el programa ensamblador que organiza las colocaciones, los turnos, los disparos y el resultado. Solicita instrucciones a la ROM y lee o escribe RAM y periféricos mediante el controlador de mapeo. Para el procesador la RAM y los periféricos son lo mismo, direcciones a las que se les hace `lw` o `sw`, por eso no necesita instrucciones de entrada y salida. La lógica de las reglas reside en el programa, no en los periféricos.
 
-Objetivo. Ejecutar el programa en ensamblador que tiene toda la lógica de la partida.
+- Entradas, `clk_i`, `rst_i`, `ProgIn_i[31:0]` desde la ROM y `DataIn_i[31:0]` desde el controlador de mapeo.
+- Salidas, `ProgAddress_o[31:0]` hacia la ROM, y `DataAddress_o[31:0]`, `DataOut_o[31:0]` y `we_o` hacia el controlador de mapeo.
 
-Entradas.
+### Bloque 3: Memoria de programa (ROM)
 
-- `clk_i`, `rst_i`.
-- `ProgIn_i[31:0]`, instrucción leída de la ROM.
-- `DataIn_i[31:0]`, dato leído de la RAM o de un periférico.
+Guarda las instrucciones del programa. Ocupa `0x0000_0000` a `0x0000_1FFF`, 8 KB, y el vector de reset está en `0x0000_0000`, así que el programa empieza en la primera palabra. Su camino es independiente del acceso a los datos.
 
-Salidas.
+- Entradas, `ProgAddress_o[31:0]` del procesador.
+- Salidas, `ProgIn_i[31:0]` hacia el procesador.
 
-- `ProgAddress_o[31:0]`, dirección de la instrucción hacia la ROM.
-- `DataAddress_o[31:0]`, `DataOut_o[31:0]`, `we_o`, bus de datos hacia `BUS_DATOS`.
+### Bloque 4: Memoria de datos (RAM)
 
-Explicación general. Es el núcleo de la figura 2 del enunciado, con buses separados para programa y
-datos. Para el procesador la RAM y los periféricos son lo mismo, direcciones a las que se les hace
-`lw` o `sw`. Por eso no necesita instrucciones de entrada y salida.
+Guarda los tableros, el turno, el progreso de colocación, los contadores de la partida y la pila. Ocupa `0x0000_2000` a `0x0000_2FFF`, 4 KB. El procesador accede a ella a través del controlador de mapeo, y la organización de los datos adentro está en el nivel 3.
 
-## ROM
+- Entradas, dirección, dato de escritura y habilitación de escritura desde el controlador de mapeo.
+- Salidas, dato leído hacia el multiplexor de lectura del controlador de mapeo.
 
-Objetivo. Guardar el programa en ensamblador ya ensamblado.
+### Bloque 5: Controlador de mapeo
 
-Entradas.
+Decodifica las direcciones de datos, selecciona RAM o el periférico correspondiente y devuelve al procesador el dato leído. Deja pasar `we_o` solo hacia el destino de la dirección, y su multiplexor de lectura elige cuál `rdata_o` sube a `DataIn_i`. A los periféricos de registros les llega `DataAddress_o[3:2]` como `addr_i[1:0]`, porque sus registros van de 4 en 4 bytes. No interviene en la conexión independiente con la ROM. Su parte de decodificación es el Address Translator, detallado en [`Address_Translator.md`](../modulos/Address_Translator.md).
 
-- `ProgAddress_o[31:0]`, del núcleo.
+- Entradas, `DataAddress_o[31:0]`, `DataOut_o[31:0]` y `we_o` del procesador, y el `rdata_o[31:0]` de cada periférico junto con el dato leído de la RAM.
+- Salidas, `write_enable_i`, `addr_i` y `wdata_i[31:0]` hacia cada periférico y las señales equivalentes hacia la RAM, y `DataIn_i[31:0]` hacia el procesador.
 
-Salidas.
+### Bloque 6: PERIFERICO_ENTRADAS
 
-- `ProgIn_i[31:0]`, hacia el núcleo.
+Registra los siete botones del Jugador 1 y expone su estado al procesador en un registro de lectura en `0x0001_0120`. El programa interpreta la navegación, la selección, la confirmación y el reinicio, y saca los flancos comparando con la lectura anterior.
 
-Explicación general. Ocupa `0x0000_0000` a `0x0000_1FFF`, 8 KB. El vector de reset está en
-`0x0000_0000`, así que el programa empieza en la primera palabra.
+- Entradas, bus estándar y los siete botones del Jugador 1.
+- Salidas, `rdata_o[31:0]` hacia el multiplexor de lectura.
 
-## RAM
+### Bloque 7: PERIFERICO_UART
 
-Objetivo. Guardar los datos de la partida, los dos tableros, el turno, los contadores y la pila.
+Mueve bytes entre el programa y la aplicación de PC, y es el único canal que tiene el Jugador 2 con la partida. Es el periférico del Proyecto 2 que pide reutilizar la sección 4.5.3 del enunciado, con el mapa de registros de la tabla 4.4.3, control en `0x0001_0040`, datos de transmisión en `0x0001_0044` y datos de recepción en `0x0001_0048`. No entiende las tramas del juego. Manda el byte que el programa escribe y avisa con una bandera cuando llega uno. Armar y validar las tramas es trabajo del programa. El detalle está en [`PERIFERICO_UART.md`](../modulos/PERIFERICO_UART.md).
 
-Entradas.
+- Entradas, bus estándar y `rx_i` desde el pin B18.
+- Salidas, `rdata_o[31:0]` hacia el multiplexor de lectura y `tx_o` hacia el pin A18.
 
-- Dirección, dato de escritura y habilitación de escritura, desde `BUS_DATOS`.
+### Bloque 8: PERIFERICO_VGA
 
-Salidas.
+Lee su mapa de casillas para generar la imagen del Jugador 1 a 640 × 480 a 60 Hz. Se expone como una memoria de video en `0x0001_1000` a `0x0001_17FF`, una palabra por casilla de la cuadrícula. El procesador escribe por el reloj del sistema y la lógica de video lee por el reloj de pixel. El periférico genera los sincronismos y la imagen, sin aplicar reglas del juego. El detalle está en [`PERIFERICO_VGA.md`](../modulos/PERIFERICO_VGA.md).
 
-- Dato leído, hacia el mux de lectura de `BUS_DATOS`.
+- Entradas, bus de memoria con `addr_i[8:0]`, y `clk_pix` del PLL.
+- Salidas, `rdata_o[31:0]` hacia el multiplexor de lectura, y `vgaRed[3:0]`, `vgaGreen[3:0]`, `vgaBlue[3:0]`, `Hsync` y `Vsync`.
 
-Explicación general. Ocupa `0x0000_2000` a `0x0000_2FFF`, 4 KB. La organización de los datos adentro
-es decisión del programa y se documenta aparte.
+### Bloque 9: PERIFERICO_7SEG
 
-## BUS_DATOS
+Presenta las victorias acumuladas de ambos jugadores, dos dígitos para cada uno, de 00 a 99. El programa lleva los contadores en BCD y los escribe en `0x0001_0130`. El periférico solo guarda lo escrito y hace el barrido de los dígitos.
 
-Objetivo. Repartir el bus de datos del núcleo entre la RAM y los periféricos según la dirección.
+- Entradas, bus estándar.
+- Salidas, `rdata_o[31:0]` hacia el multiplexor de lectura, y `seg[6:0]`, `an[3:0]` y `dp`.
 
-Entradas.
+### Bloque 10: PERIFERICO_LED
 
-- `DataAddress_o[31:0]`, `DataOut_o[31:0]`, `we_o`, del núcleo.
-- `rdata_o[31:0]` de cada periférico y el dato leído de la RAM.
+Distingue colocación, batalla y resultado con un LED por fase. El programa escribe el patrón en `0x0001_0138` cada vez que cambia de fase.
 
-Salidas.
+- Entradas, bus estándar.
+- Salidas, `rdata_o[31:0]` hacia el multiplexor de lectura, y `led[2:0]`.
 
-- `write_enable_i`, `addr_i` y `wdata_i[31:0]` hacia cada periférico, y las mismas señales hacia la RAM.
-- `DataIn_i[31:0]`, hacia el núcleo.
+### Bloque 11: PERIFERICO_BUZZER
 
-Explicación general. Tiene dos partes. El decodificador mira `DataAddress_o`, decide a quién va el
-acceso y deja pasar `we_o` solo hacia ese destino. El mux de lectura elige cuál `rdata_o` sube a
-`DataIn_i`. A los periféricos de registros les llega `DataAddress_o[3:2]` como `addr_i[1:0]`, porque
-sus registros van de 4 en 4 bytes.
+Genera los sonidos de colocación inválida, impacto, fallo, barco hundido y victoria. El programa escribe el código del evento en `0x0001_0140` y el periférico produce la señal sonora.
 
-## PERIFERICO_UART
+- Entradas, bus estándar.
+- Salidas, `rdata_o[31:0]` hacia el multiplexor de lectura, y `buzzer`.
 
-Objetivo. Mover bytes entre el programa y la app de PC del Jugador 2. Es el único canal que tiene el
-Jugador 2 con la partida.
+### Elemento externo: Aplicación de PC
 
-Entradas.
+Permite al Jugador 2 elegir acciones y ver sus tableros, turno y resultados. Se comunica con la FPGA por UART y no decide reglas ni recibe ubicaciones ocultas del Jugador 1.
 
-- `clk_i`, `rst_i`.
-- `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]`, desde `BUS_DATOS`.
-- `rx_i`, línea serial desde el pin B18.
+### Interfaz principal
 
-Salidas.
+- **ROM ↔ procesador.** `ProgAddress_o` y `ProgIn_i` son los nombres indicados en el enunciado.
+- **Procesador ↔ controlador.** `DataAddress_o`, `DataOut_o`, `we_o` y `DataIn_i` son los nombres indicados en el enunciado.
+- **Controlador ↔ periféricos de registros.** Bus estándar de la sección 4.5.5, `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`.
+- **Controlador ↔ VGA.** El mismo bus pero con `addr_i[8:0]`, porque el VGA se comporta como memoria.
+- **UART ↔ aplicación de PC.** Enlace serial bidireccional a 115200 baudios, la PC actúa como interfaz del Jugador 2.
 
-- `rdata_o[31:0]`, hacia el mux de lectura de `BUS_DATOS`.
-- `tx_o`, línea serial hacia el pin A18.
+## Funcionamiento general
 
-Explicación general. Es el periférico del Proyecto 2 que pide reutilizar la sección 4.5.3 del
-enunciado, con el mapa de registros de la tabla 4.4.3. Ocupa `0x0001_0040` a `0x0001_004F` y tiene
-tres registros, control en `0x40`, datos de transmisión en `0x44` y datos de recepción en `0x48`.
-No entiende las tramas del juego. Manda el byte que el programa escribe y avisa con una bandera cuando
-llega uno. Armar y validar las tramas es trabajo del ensamblador. El detalle está en
-`../modulos/PERIFERICO_UART.md`.
+Todo gira alrededor del procesador. Toma instrucciones de la ROM por su bus de programa y usa el bus de datos para todo lo demás. Cada `lw` o `sw` pasa por el controlador de mapeo, que decide por la dirección si el acceso va a la RAM o a un periférico. Así el mismo par de instrucciones sirve para leer un tablero en RAM, pintar una casilla en el VGA o mandar un byte por la UART.
 
-## PERIFERICO_VGA
+Ningún periférico decide nada del juego. El de entradas dice qué botón está presionado, el de la UART dice que llegó un byte, y el programa decide qué significan. En sentido contrario, el programa escribe un color en la memoria de video, un número en los 7 segmentos o un byte en la UART, y cada periférico se encarga de la parte física, sea temporización, multiplexado o formación del bit serie.
 
-Objetivo. Dibujar en el monitor los tableros y el HUD a 640x480 a 60 Hz.
-
-Entradas.
-
-- `clk_i`, `rst_i`, `clk_pixel`.
-- `write_enable_i`, `addr_i`, `wdata_i[31:0]`, desde `BUS_DATOS`, con `addr_i` más ancho que en los periféricos de registros.
-
-Salidas.
-
-- `rdata_o[31:0]`, hacia el mux de lectura.
-- `vgaRed[3:0]`, `vgaGreen[3:0]`, `vgaBlue[3:0]`, `Hsync`, `Vsync`.
-
-Explicación general. Se expone como una memoria de video en `0x0001_1000` a `0x0001_17FF`, una palabra
-por casilla de la cuadrícula. El CPU escribe por el reloj del sistema y la lógica de video lee por el
-reloj de pixel. TODO: Revisar el ancho final de `addr_i`, la cuadrícula y el cruce de dominios cuando exista el diseño del VGA.
-
-## PERIFERICO_ENTRADAS
-
-Objetivo. Entregar al programa el estado de los botones del Jugador 1 ya sin rebotes.
-
-Entradas.
-
-- `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]`.
-- Los siete botones del Jugador 1.
-
-Salidas.
-
-- `rdata_o[31:0]`, registro de estado en `0x0001_0120`.
-
-Explicación general. TODO: Revisar el mapeo de bits y el antirrebote cuando exista el diseño del periférico.
-
-## PERIFERICO_7SEG
-
-Objetivo. Mostrar las partidas ganadas de cada jugador, de 00 a 99.
-
-Entradas.
-
-- `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]`.
-
-Salidas.
-
-- `rdata_o[31:0]`.
-- `seg[6:0]`, `an[3:0]`, `dp`.
-
-Explicación general. Registro de datos en `0x0001_0130`. TODO: Revisar formato del registro y multiplexado de los dígitos.
-
-## PERIFERICO_LED
-
-Objetivo. Indicar si la partida está en colocación, batalla o resultado.
-
-Entradas.
-
-- `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]`.
-
-Salidas.
-
-- `rdata_o[31:0]`.
-- LED de estado.
-
-Explicación general. Registro de datos en `0x0001_0138`. TODO: Revisar codificación de las tres fases.
-
-## PERIFERICO_BUZZER
-
-Objetivo. Generar los cinco sonidos del enunciado, impacto, fallo, hundido, colocación inválida y victoria.
-
-Entradas.
-
-- `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]`.
-
-Salidas.
-
-- `rdata_o[31:0]`.
-- `buzzer`.
-
-Explicación general. Registro de control en `0x0001_0140`. TODO: Revisar cómo se codifica cada sonido en el registro.
-
-## Explicación del sistema
-
-Todo gira alrededor del núcleo. Toma instrucciones de la ROM por su bus de programa y usa el bus de
-datos para todo lo demás. Cada `lw` o `sw` pasa por `BUS_DATOS`, que decide por la dirección si el
-acceso va a la RAM o a un periférico. Así el mismo par de instrucciones sirve para leer un tablero en
-RAM, pintar una casilla en el VGA o mandar un byte por la UART.
-
-Ningún periférico decide nada del juego. El de entradas dice qué botón se presionó, el de la UART dice
-que llegó un byte, y el programa decide qué significan. En sentido contrario, el programa escribe un
-color en la memoria de video, un número en los 7 segmentos o un byte en la UART, y cada periférico se
-encarga de la parte física, sea temporización, multiplexado o formación del bit serie.
-
-Como nada bloquea al núcleo, el lazo principal puede sondear botones y UART en la misma vuelta. En eso
-se apoya la colocación concurrente de los dos jugadores.
+Como ningún acceso detiene al procesador, el lazo principal puede sondear botones y UART en la misma vuelta. En eso se apoya la colocación concurrente de los dos jugadores.
