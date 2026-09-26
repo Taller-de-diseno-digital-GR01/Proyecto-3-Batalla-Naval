@@ -271,7 +271,7 @@ Un barco está hundido cuando `impactos_jX[id]` llega a `4 − id`, y la partida
 
 ### Códigos que escribe el programa en los periféricos
 
-- **LED de estado:** `00` colocación, `01` batalla, `10` resultado.
+- **LED de estado:** un bit por fase, `0x1` colocación (LD0), `0x2` batalla (LD1) y `0x4` resultado (LD2).
 - **Buzzer:** los códigos de `REG_SONIDO`, `001` impacto, `010` fallo, `011` hundido, `100` colocación inválida y `101` victoria. Un código nuevo corta al que esté sonando, así que un disparo que hunde un barco escribe solo `011`, y el que termina la partida escribe solo `101`.
 - **Displays:** `ganadas_bcd` completo, en una sola escritura.
 
@@ -336,9 +336,9 @@ flowchart TD
     ARR(["Arranque por rst_i"]) --> BASE["Cargar registros base y sp"]
     BASE --> GAN["ganadas_bcd = 0<br/>Escribir displays"]
     GAN --> NP["NUEVA_PARTIDA<br/>Limpiar tableros y variables en RAM<br/>Limpiar memoria de video<br/>Dibujar tableros vacíos y HUD"]
-    NP --> INI["fase = colocación, LED = 00<br/>UART: Estado colocación"]
+    NP --> INI["fase = colocación, LED = 0x1<br/>UART: Estado colocación"]
     INI --> COL[["Fase de colocación"]]
-    COL -->|"flotas de J1 y J2 completas"| BAT0["fase = batalla, LED = 01, turno = J1<br/>UART: Estado batalla y Estado turno J1"]
+    COL -->|"flotas de J1 y J2 completas"| BAT0["fase = batalla, LED = 0x2, turno = J1<br/>UART: Estado batalla y Estado turno J1"]
     BAT0 --> BAT[["Fase de batalla"]]
     BAT -->|"hundidos = 3"| FIN[["Fin de partida"]]
     COL -->|"BTN_RST"| NP
@@ -422,7 +422,7 @@ Mientras es el turno del Jugador 2, las tramas se siguen leyendo en cada vuelta 
 
 ```mermaid
 flowchart TD
-    E(["Fin de partida"]) --> F["fase = resultado, LED = 10"]
+    E(["Fin de partida"]) --> F["fase = resultado, LED = 0x4"]
     F --> HUD["Pintar en el HUD el color del ganador"]
     HUD --> BZ["Buzzer: victoria"]
     BZ --> M["ganadas_bcd del ganador + 1<br/>Escribir displays"]
