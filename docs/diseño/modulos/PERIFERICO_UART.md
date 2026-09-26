@@ -84,7 +84,9 @@ escribe el CPU y lo limpia el hardware.
 
 Para recibir, el núcleo avisa con un pulso de un ciclo que hay un byte nuevo. El periférico lo
 guarda en el registro de datos de recepción y levanta `new_rx`. Ese bit se queda alto hasta que
-el programa lo escriba en cero después de leer el dato.
+el programa lo escriba en cero después de leer el dato. Cualquier escritura al control escribe también `new_rx`, así que la
+escritura que arranca un envío lo puede bajar sin querer. El orden de accesos que evita perder un byte
+está en `../diagramas/nivel03.md`, en "Cómo usa la ROM el periférico".
 
 Nada de esto bloquea al CPU. El lazo principal sondea `new_rx` en cada vuelta junto con los
 botones del Jugador 1, que es lo que permite la colocación concurrente. Un byte a 115200 baudios
