@@ -8,7 +8,7 @@ PERIFERICO_UART
 
 ```mermaid
 flowchart LR
-    IN_WE(["write_enable_i<br/>(AND_WE)"]) --> PUART["PERIFERICO_UART<br/>0x0001_0040 a 0x0001_004F"]
+    IN_WE(["write_enable_i<br/>(uart_we)"]) --> PUART["PERIFERICO_UART<br/>0x0001_0040 a 0x0001_004F"]
     IN_ADDR(["addr_i[1:0]<br/>(DataAddress_o[3:2])"]) --> PUART
     IN_WD(["wdata_i[31:0]<br/>(DataOut_o)"]) --> PUART
     IN_RX(["rx_i<br/>(pin B18)"]) --> PUART
@@ -35,7 +35,7 @@ direcciones y levanta banderas para que el programa en ensamblador las lea.
 ## d) Entradas
 
 - `clk_i`, `rst_i`.
-- `write_enable_i`, habilitación de escritura, desde `AND_WE` del bus de datos (`we_o` del CPU en AND
+- `write_enable_i`, habilitación de escritura, desde `uart_we` del controlador de mapeo (`we_o` del CPU en AND
   con `sel_uart`).
 - `addr_i[1:0]`, dirección del registro, sale de `DataAddress_o[3:2]` del CPU.
 - `wdata_i[WIDTH-1:0]`, dato a escribir, desde `DataOut_o` del CPU.
@@ -239,7 +239,7 @@ Conexiones en el top:
 
 - `clk_i`, al reloj global de 100 MHz, pin W5.
 - `rst_i`, al reset del sistema.
-- `write_enable_i`, a la salida de `AND_WE`, en alto solo cuando `we_o` está en alto y
+- `write_enable_i`, a `uart_we` del controlador de mapeo, en alto solo cuando `we_o` está en alto y
   `DataAddress_o` cae entre `0x0001_0040` y `0x0001_004F`.
 - `addr_i[1:0]`, a `DataAddress_o[3:2]`.
 - `wdata_i[31:0]`, a `DataOut_o`.
