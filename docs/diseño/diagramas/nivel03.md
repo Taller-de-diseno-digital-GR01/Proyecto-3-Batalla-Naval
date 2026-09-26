@@ -222,7 +222,7 @@ Todos los mensajes, en los dos sentidos, son tramas de 5 bytes con el mismo form
   inicio   mensaje  dato 1   dato 2   verificación
 ```
 
-- **Inicio `0xAA`.** Si el primer byte no es `0xAA`, el receptor lo descarta y sigue buscando. Así se vuelve a sincronizar si se pierde un byte.
+- **Inicio `0xAA`.** En una trama válida `0xAA` solo aparece en el primer byte. Los TIPO van de `0x10` a `0x25`, las casillas llegan hasta `0x77`, el id con la orientación hasta `0x82`, los conteos del resumen hasta 64, y ninguna verificación posible da `0xAA`. Por eso cualquier `0xAA` que llegue pone `rx_indice` en 1, vaya por donde vaya la trama en armado, y cualquier otro byte con `rx_indice` en 0 se descarta. Si se pierde un byte, se pierde solo esa trama y la siguiente entra completa. Un mensaje o un rango nuevo tiene que respetar esta propiedad.
 - **Longitud fija.** El receptor en ensamblador es un contador de 0 a 4 (`rx_indice`), y la aplicación de PC usa el mismo lector.
 - **Verificación XOR.** Detecta bytes corruptos. Junto con el inicio y la revisión de rangos cumple el requisito de descartar todo byte que no forme un mensaje válido.
 - **Casilla en un byte.** Toda casilla viaja como `(fila << 4) | columna`, con fila y columna de 0 a 7.
@@ -240,7 +240,30 @@ Todos los mensajes, en los dos sentidos, son tramas de 5 bytes con el mismo form
 
 Disparo dado lleva la casilla para que la PC no tenga que recordar qué mandó, y el código `11` le avisa que el disparo se ignoró por repetido y que tiene que pedir otra casilla. Disparo recibido lleva la casilla porque la PC no tiene otra forma de saber dónde disparó el Jugador 1. El resumen son cuatro números, así que va en dos tramas.
 
-Un byte que no completa una trama válida, o una trama válida que no corresponde a la fase o al turno en curso, se descarta sin respuesta y sin afectar la partida.
+Un byte que no completa una trama válida, o una trama válida que no corresponde a la fase o al turno en curso, se descarta sin respuesta y sin afectar la partida. Una trama de la PC es válida si pasa todos estos chequeos:
+
+- La verificación coincide con `TIPO xor D1 xor D2`.
+- `TIPO` es `0x10` o `0x11`, los únicos que manda la PC.
+- Toda casilla cumple `(casilla & 0x88) == 0`, o sea fila y columna de 0 a 7. En ensamblador es un `andi` y un `bnez`.
+- En Colocar barco, `(D1 & 0x7C) == 0` y el id no es 3.
+- En Disparo, `D2` es `0x00`.
+
+Una casilla con fila o columna mayor que 7 es una trama malformada y se descarta sin respuesta, porque la aplicación de PC ya valida ese rango antes de transmitir. El motivo `10` de Resultado de colocación es solo para un barco que empieza dentro del tablero y se sale por su largo y su orientación.
+
+#### Cómo usa la ROM el periférico
+
+El registro de control guarda `send` y `new_rx` en la misma palabra, y cualquier escritura al control escribe los dos. Un `sw` de 1 para arrancar un envío deja también `new_rx` en 0, y si había un byte recibido sin leer se pierde sin aviso. Por eso la ROM sigue siempre el mismo orden.
+
+- **Recibir.** Cuando `new_rx` está en 1, `lw` del dato en `0x048(s0)`, `sw x0, 0x040(s0)` para limpiar `new_rx`, y después procesar el byte. Escribir 0 no baja `send`, ese bit solo lo baja el núcleo al terminar.
+- **Enviar un byte.** Esperar `send` en 0, `sw` del byte en `0x044(s0)`, y arrancar con `lw` del control, `ori` con 1 y `sw` al control. Así se escribe de vuelta el `new_rx` que había.
+
+Con el `lw`, `ori` y `sw` sigue quedando una ventana de dos ciclos, un byte que termine de llegar entre el `lw` y el `sw` se pierde. La regla de conversación de abajo hace que esa ventana no se alcance.
+
+Una trama se manda completa de una vez, esperando `send` en 0 antes de cada byte. Son 5 bytes, unos 434 µs, y el fin de partida manda 3 tramas seguidas, unos 1.3 ms. Durante ese rato el lazo no sondea `new_rx`, y el periférico guarda un solo byte recibido, así que un segundo byte pisaría al primero.
+
+Las dos cosas se resuelven con una regla que es parte del protocolo, la PC solo transmite cuando le toca y espera la respuesta antes de volver a transmitir. En la colocación manda un Colocar barco y no manda el siguiente hasta recibir su Resultado de colocación. En la batalla manda un Disparo solo con el turno del Jugador 2 y espera el Disparo dado. Todo lo demás que manda la FPGA cae en momentos en que la PC no está transmitiendo. El único caso que se sale es `BTN_RST` mientras la PC manda una colocación, y lo peor que pasa ahí es que esa trama se pierde. `NUEVA_PARTIDA` pone `rx_indice` en 0 junto con el resto de la RAM, y la PC toma un Estado colocación como reinicio de su vista en cualquier momento de la partida.
+
+Como la FPGA descarta sin responder, la PC espera cada respuesta con un tiempo límite. Si vence, avisa al usuario y vuelve a pedir la jugada en vez de quedarse colgada. Reenviar un Colocar barco es seguro, porque si el primero sí entró la respuesta es `11` y la PC lo toma como aceptado. Con un Disparo no, si el primero contó y se perdió la respuesta, el reenvío sale como repetido. Con el puente USB-UART de la tarjeta eso es muy improbable, y el Estado turno del Jugador 1 que llega después le indica a la PC que deje de pedir disparo.
 
 ### Flujo general
 
@@ -261,7 +284,7 @@ flowchart TD
 
 El programa tiene dos entradas. El arranque por `rst_i` es el reinicio general del sistema: carga los registros base y pone en cero las partidas ganadas. `BTN_RST` salta directo a `NUEVA_PARTIDA` y conserva las ganadas, como pide el instructivo.
 
-Cada fase es un **lazo que nunca espera**. En cada vuelta el programa lee los botones una vez, atiende como máximo un byte de la UART y vuelve a empezar. Así el Jugador 1 y el Jugador 2 avanzan a la vez sin que uno bloquee al otro, que es lo que exige la colocación concurrente. Los botones se leen por flanco, `flancos = actual & ~botones_prev`, porque el periférico de entradas entrega niveles y una presión larga se vería en muchas vueltas seguidas. `BTN_RST` se revisa en todas las vueltas de las tres fases.
+Cada fase es un **lazo que nunca espera**. En cada vuelta el programa lee los botones una vez, atiende como máximo un byte de la UART y vuelve a empezar. La única espera es la transmisión de una trama, que está acotada y se explica en los mensajes UART. Así el Jugador 1 y el Jugador 2 avanzan a la vez sin que uno bloquee al otro, que es lo que exige la colocación concurrente. Los botones se leen por flanco, `flancos = actual & ~botones_prev`, porque el periférico de entradas entrega niveles y una presión larga se vería en muchas vueltas seguidas. `BTN_RST` se revisa en todas las vueltas de las tres fases.
 
 ### Fase de colocación
 
@@ -358,6 +381,6 @@ La privacidad se cumple en los dos únicos puntos por donde el programa saca inf
 
 ## Funcionamiento en conjunto
 
-Para transmitir un byte, el programa escribe en `0x0001_0044` y luego activa `send` en `0x0001_0040`. El decodificador de direcciones selecciona UART; sus registros alimentan `uart_tx`, que serializa el dato hacia la PC. Para recibirlo, `uart_rx` carga `reg_rx`, sube `new_rx` y el programa puede consultar `0x0001_0040`, leer `0x0001_0048` y limpiar la bandera. Las esperas del enlace se gestionan por sondeo de esos bits; UART no decide las jugadas.
+Para transmitir un byte, el programa escribe en `0x0001_0044` y luego activa `send` en `0x0001_0040`. El decodificador de direcciones selecciona UART; sus registros alimentan `uart_tx`, que serializa el dato hacia la PC. Para recibirlo, `uart_rx` carga `reg_rx`, sube `new_rx` y el programa puede consultar `0x0001_0040`, leer `0x0001_0048` y limpiar la bandera. Las esperas del enlace se gestionan por sondeo de esos bits; UART no decide las jugadas. El orden exacto de esos accesos está en [Cómo usa la ROM el periférico](#cómo-usa-la-rom-el-periférico).
 
 Las conexiones completas del procesador con RAM, VGA y los demás periféricos siguen pendientes de integración. La organización interna del VGA descrita en su sección es una **propuesta** de diseño: la rama `feature/VGA` todavía no contiene RTL.
