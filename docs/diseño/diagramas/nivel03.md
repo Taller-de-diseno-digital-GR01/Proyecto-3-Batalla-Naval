@@ -127,6 +127,233 @@ Este bloque corresponde al módulo que conecta al procesador (CPU) con el monito
 - **Barrido:** dos contadores (módulo 800 y módulo 525) y sus comparadores generan `hsync`, `vsync` y `video_on` para 640 × 480 a 60 Hz. El índice de la casilla es `fila × 20 + col`, con `col = h_count[9:5]` y `fila = v_count[8:5]`.
 - **Salida:** los bits `[2:0]` de la palabra pasan por una paleta a RGB444, se fuerzan a negro fuera del área visible y se registran junto con los sincronismos, que se retrasan lo mismo que la lectura de la BRAM.
 
+## Programa en ensamblador
+
+El programa corre en `PROCESADOR_UNICICLO` desde la ROM y es el único lugar donde viven las reglas del juego. Los periféricos solo exponen entradas y salidas, y la aplicación de PC solo muestra lo que el programa le manda. En este nivel el programa se abre en cuatro diagramas de flujo: el flujo general, la fase de colocación, la fase de batalla y el fin de partida. Las cajas con nombre en mayúsculas (`NUEVA_PARTIDA`, `VALIDAR_COLOCACION`, `PROCESAR_DISPARO`) son subrutinas, y su detalle, junto con el armado de tramas UART, el cursor y la vista previa, va en el doc de nivel 4 del programa.
+
+### Restricciones del núcleo sobre el programa
+
+La lista base de instrucciones del instructivo condiciona cómo se escribe el programa:
+
+- **No hay `lui` ni `auipc`.** `addi` carga constantes de −2048 a 2047, así que ninguna dirección de RAM ni de periférico cabe en una sola instrucción. Las direcciones se arman una vez al arrancar en registros base (tabla de abajo) y los accesos usan `lw`/`sw` con desplazamiento. Por la misma razón el programa no usa las pseudoinstrucciones `la`, `call` ni `li` con constantes grandes, y llama a las subrutinas con `jal ra, etiqueta`.
+- **No hay `lb` ni `sb`.** Todas las variables y las casillas de los tableros ocupan una palabra de 32 bits.
+- **No hay `mul`.** Los índices salen con desplazamientos: `fila × 8 = fila << 3` para los tableros y `fila × 20 = (fila << 4) + (fila << 2)` para la memoria de video.
+- **La ROM no está en el bus de datos.** El programa no puede leer tablas constantes de la ROM con `lw`. Las constantes van como inmediatos. La longitud de un barco, por ejemplo, sale de `4 − id` (4, 3 y 2 casillas para los id 0, 1 y 2).
+
+### Registros base
+
+| Registro | Valor | Cómo se arma | Qué se alcanza con él |
+|---|---|---|---|
+| `s0` | `0x0001_0000` | `addi s0, x0, 1` y `slli s0, s0, 16` | Registros de periféricos, desplazamientos `0x040` a `0x140` |
+| `s1` | `0x0001_1000` | `addi s1, x0, 17` y `slli s1, s1, 12` | Memoria de video, casillas 0 a 299 (desplazamiento máximo 1196) |
+| `s2` | `0x0000_2000` | `addi s2, x0, 1` y `slli s2, s2, 13` | Variables en RAM, desplazamientos `0x000` a `0x7FF` |
+| `sp` | `0x0000_3000` | `addi sp, x0, 3` y `slli sp, sp, 12` | Tope de la pila, que crece hacia abajo |
+
+Estos cuatro registros se cargan al arrancar y ninguna subrutina los modifica.
+
+| Acceso | Instrucción | Dirección |
+|---|---|---|
+| Control y estado de la UART | `lw`/`sw` `0x040(s0)` | `0x0001_0040` |
+| Dato a transmitir | `sw` `0x044(s0)` | `0x0001_0044` |
+| Dato recibido | `lw` `0x048(s0)` | `0x0001_0048` |
+| Botones del Jugador 1 | `lw` `0x120(s0)` | `0x0001_0120` |
+| Displays de 7 segmentos | `sw` `0x130(s0)` | `0x0001_0130` |
+| LED de estado | `sw` `0x138(s0)` | `0x0001_0138` |
+| Buzzer | `sw` `0x140(s0)` | `0x0001_0140` |
+| Casilla `(f, c)` del tablero del Jugador 1 en pantalla | `sw` `4 × ((3 + f) × 20 + 1 + c)(s1)` | `0x0001_1000` a `0x0001_17FF` |
+| Casilla `(f, c)` del tablero del Jugador 2 en pantalla | `sw` `4 × ((3 + f) × 20 + 11 + c)(s1)` | `0x0001_1000` a `0x0001_17FF` |
+
+Las posiciones de los tableros en pantalla (filas 3 a 10, columnas 1 a 8 y 11 a 18) siguen la distribución de [`PERIFERICO_VGA.md`](../modulos/PERIFERICO_VGA.md).
+
+### Organización de la RAM
+
+Cada casilla de un tablero es una palabra, en el índice `fila × 8 + columna`. Sus bits `[1:0]` guardan el estado con los mismos códigos que la paleta del VGA, y los bits `[3:2]` guardan el id del barco que la ocupa.
+
+| `[1:0]` | Estado | Color VGA |
+|---|---|---|
+| `00` | Agua sin disparar | `000`, agua |
+| `01` | Barco sin disparar | `001`, barco propio |
+| `10` | Impacto | `010`, impacto |
+| `11` | Fallo | `011`, fallo |
+
+Con esta codificación una casilla ya disparada es la que tiene el bit 1 en uno, y el tablero propio del Jugador 1 se pinta copiando el estado tal cual.
+
+| Dirección | Variable | Contenido |
+|---|---|---|
+| `0x0000_2000` a `0x0000_20FF` | `tablero_j1[64]` | Casillas del Jugador 1 |
+| `0x0000_2100` a `0x0000_21FF` | `tablero_j2[64]` | Casillas del Jugador 2 |
+| `0x0000_2200` | `fase` | 0 colocación, 1 batalla, 2 resultado |
+| `0x0000_2204` | `turno` | 0 Jugador 1, 1 Jugador 2 |
+| `0x0000_2208` | `colocados_j1` | Barcos colocados por el Jugador 1, de 0 a 3. El Jugador 1 coloca en orden, así que también es el id del barco que sigue |
+| `0x0000_220C` | `colocados_j2` | Máscara `[2:0]` con un bit por id, porque la PC manda el id de cada barco |
+| `0x0000_2210` | `cursor_fila` | Fila del cursor del Jugador 1 |
+| `0x0000_2214` | `cursor_col` | Columna del cursor del Jugador 1 |
+| `0x0000_2218` | `orientacion` | 0 horizontal, 1 vertical |
+| `0x0000_221C` | `botones_prev` | Lectura anterior de los botones, para sacar los flancos |
+| `0x0000_2220` a `0x0000_2228` | `impactos_j1[3]` | Impactos recibidos por cada barco del Jugador 1 |
+| `0x0000_222C` a `0x0000_2234` | `impactos_j2[3]` | Impactos recibidos por cada barco del Jugador 2 |
+| `0x0000_2238` | `disparos_j1` | Disparos válidos del Jugador 1, para el resumen |
+| `0x0000_223C` | `disparos_j2` | Disparos válidos del Jugador 2, para el resumen |
+| `0x0000_2240` | `hundidos_por_j1` | Barcos del Jugador 2 hundidos por el Jugador 1 |
+| `0x0000_2244` | `hundidos_por_j2` | Barcos del Jugador 1 hundidos por el Jugador 2 |
+| `0x0000_2248` | `ganadas_bcd` | Partidas ganadas en BCD, con el mismo formato que `REG_DIGITOS` del display: `[15:8]` Jugador 1, `[7:0]` Jugador 2 |
+| `0x0000_224C` | `rx_indice` | Posición del próximo byte dentro de la trama UART que se está armando |
+| `0x0000_2250` a `0x0000_2260` | `rx_trama[5]` | Bytes de la trama UART en armado |
+| `0x0000_2FFC` hacia abajo | pila | Direcciones de retorno y registros que guardan las subrutinas |
+
+Un barco está hundido cuando `impactos_jX[id]` llega a `4 − id`, y la partida termina cuando `hundidos_por_jX` llega a 3 (los 9 impactos de la flota). `NUEVA_PARTIDA` limpia todo lo anterior salvo `ganadas_bcd`, que solo se pone en cero en el arranque por `rst_i`.
+
+### Códigos que escribe el programa en los periféricos
+
+- **LED de estado:** `00` colocación, `01` batalla, `10` resultado.
+- **Buzzer:** los códigos de `REG_SONIDO`, `001` impacto, `010` fallo, `011` hundido, `100` colocación inválida y `101` victoria. Un código nuevo corta al que esté sonando, así que un disparo que hunde un barco escribe solo `011`, y el que termina la partida escribe solo `101`.
+- **Displays:** `ganadas_bcd` completo, en una sola escritura.
+
+### Mensajes UART que usa el flujo
+
+Todos los mensajes, en los dos sentidos, son tramas de 5 bytes con el mismo formato:
+
+```
++--------+--------+--------+--------+--------------------+
+|  0xAA  |  TIPO  |   D1   |   D2   | TIPO xor D1 xor D2 |
++--------+--------+--------+--------+--------------------+
+  inicio   mensaje  dato 1   dato 2   verificación
+```
+
+- **Inicio `0xAA`.** Si el primer byte no es `0xAA`, el receptor lo descarta y sigue buscando. Así se vuelve a sincronizar si se pierde un byte.
+- **Longitud fija.** El receptor en ensamblador es un contador de 0 a 4 (`rx_indice`), y la aplicación de PC usa el mismo lector.
+- **Verificación XOR.** Detecta bytes corruptos. Junto con el inicio y la revisión de rangos cumple el requisito de descartar todo byte que no forme un mensaje válido.
+- **Casilla en un byte.** Toda casilla viaja como `(fila << 4) | columna`, con fila y columna de 0 a 7.
+
+| TIPO | Sentido | Mensaje | D1 | D2 |
+|---|---|---|---|---|
+| `0x10` | PC a FPGA | Colocar barco | id en `[1:0]` (0 a 2), orientación en el bit 7 (0 horizontal, 1 vertical) | casilla inicial |
+| `0x11` | PC a FPGA | Disparo | casilla objetivo en el tablero del Jugador 1 | `0x00` |
+| `0x20` | FPGA a PC | Estado | `00` colocación, `01` batalla, `10` turno, `11` fin | en turno, el jugador que lo tiene (0 J1, 1 J2). En fin, el ganador. En los demás, `0x00` |
+| `0x21` | FPGA a PC | Resultado de colocación | id del barco | `00` válida, `01` traslape, `10` fuera de tablero, `11` barco ya colocado |
+| `0x22` | FPGA a PC | Disparo dado (del Jugador 2) | casilla | `00` impacto, `01` fallo, `10` hundido, `11` repetido |
+| `0x23` | FPGA a PC | Disparo recibido (del Jugador 1 sobre el tablero del Jugador 2) | casilla | `00` impacto, `01` fallo, `10` hundido |
+| `0x24` | FPGA a PC | Resumen de disparos | `disparos_j1` | `disparos_j2` |
+| `0x25` | FPGA a PC | Resumen de hundidos | `hundidos_por_j1` | `hundidos_por_j2` |
+
+Disparo dado lleva la casilla para que la PC no tenga que recordar qué mandó, y el código `11` le avisa que el disparo se ignoró por repetido y que tiene que pedir otra casilla. Disparo recibido lleva la casilla porque la PC no tiene otra forma de saber dónde disparó el Jugador 1. El resumen son cuatro números, así que va en dos tramas.
+
+Un byte que no completa una trama válida, o una trama válida que no corresponde a la fase o al turno en curso, se descarta sin respuesta y sin afectar la partida.
+
+### Flujo general
+
+```mermaid
+flowchart TD
+    ARR(["Arranque por rst_i"]) --> BASE["Cargar registros base y sp"]
+    BASE --> GAN["ganadas_bcd = 0<br/>Escribir displays"]
+    GAN --> NP["NUEVA_PARTIDA<br/>Limpiar tableros y variables en RAM<br/>Limpiar memoria de video<br/>Dibujar tableros vacíos y HUD"]
+    NP --> INI["fase = colocación, LED = 00<br/>UART: Estado colocación"]
+    INI --> COL[["Fase de colocación"]]
+    COL -->|"flotas de J1 y J2 completas"| BAT0["fase = batalla, LED = 01, turno = J1<br/>UART: Estado batalla y Estado turno J1"]
+    BAT0 --> BAT[["Fase de batalla"]]
+    BAT -->|"hundidos = 3"| FIN[["Fin de partida"]]
+    COL -->|"BTN_RST"| NP
+    BAT -->|"BTN_RST"| NP
+    FIN -->|"BTN_RST"| NP
+```
+
+El programa tiene dos entradas. El arranque por `rst_i` es el reinicio general del sistema: carga los registros base y pone en cero las partidas ganadas. `BTN_RST` salta directo a `NUEVA_PARTIDA` y conserva las ganadas, como pide el instructivo.
+
+Cada fase es un **lazo que nunca espera**. En cada vuelta el programa lee los botones una vez, atiende como máximo un byte de la UART y vuelve a empezar. Así el Jugador 1 y el Jugador 2 avanzan a la vez sin que uno bloquee al otro, que es lo que exige la colocación concurrente. Los botones se leen por flanco, `flancos = actual & ~botones_prev`, porque el periférico de entradas entrega niveles y una presión larga se vería en muchas vueltas seguidas. `BTN_RST` se revisa en todas las vueltas de las tres fases.
+
+### Fase de colocación
+
+```mermaid
+flowchart TD
+    V(["Vuelta del lazo"]) --> LEER["Leer botones y calcular flancos<br/>Atender UART: un byte como máximo"]
+    LEER --> RST{"¿Flanco de BTN_RST?"}
+    RST -->|"sí"| NP(["NUEVA_PARTIDA"])
+    RST -->|"no"| J1{"¿colocados_j1 = 3?"}
+    J1 -->|"sí"| J2{"¿Trama Colocar barco lista?"}
+    J1 -->|"no"| BOT{"¿Qué botón tuvo flanco?"}
+    BOT -->|"ninguno"| J2
+    BOT -->|"flecha"| MOV["Mover cursor sin salir del tablero<br/>Repintar vista previa"]
+    BOT -->|"BTN_SEL"| ROT["Cambiar orientación<br/>Repintar vista previa"]
+    BOT -->|"BTN_OK"| VAL1{"VALIDAR_COLOCACION<br/>en tablero_j1"}
+    VAL1 -->|"traslape o fuera"| BZ["Buzzer: colocación inválida"]
+    VAL1 -->|"válida"| PUT1["Guardar barco en tablero_j1<br/>Pintarlo en VGA<br/>colocados_j1 + 1"]
+    MOV --> J2
+    ROT --> J2
+    BZ --> J2
+    PUT1 --> J2
+    J2 -->|"no"| LISTO
+    J2 -->|"sí"| REP{"¿Ese id ya está colocado?"}
+    REP -->|"sí"| RRE["UART: Resultado colocación, ya colocado"]
+    REP -->|"no"| VAL2{"VALIDAR_COLOCACION<br/>en tablero_j2"}
+    VAL2 -->|"traslape o fuera"| RNO["UART: Resultado colocación con el motivo"]
+    VAL2 -->|"válida"| PUT2["Guardar barco en tablero_j2<br/>Marcar el id en colocados_j2<br/>UART: Resultado colocación, válida"]
+    RRE --> LISTO
+    RNO --> LISTO
+    PUT2 --> LISTO
+    LISTO{"¿colocados_j1 = 3 y<br/>colocados_j2 = 111?"} -->|"no"| V
+    LISTO -->|"sí"| BAT(["Fase de batalla"])
+```
+
+La parte del Jugador 1 y la del Jugador 2 están una después de la otra dentro de la misma vuelta, y todas las salidas de la parte del Jugador 1 pasan por la del Jugador 2. Las flechas y `BTN_SEL` solo mueven la vista previa del barco. Únicamente `BTN_OK` valida y coloca. `VALIDAR_COLOCACION` es una sola subrutina para los dos jugadores: recibe la dirección del tablero, el id, la casilla inicial y la orientación, y devuelve válida, traslape o fuera de tablero.
+
+Los barcos del Jugador 2 se guardan en `tablero_j2` pero no se pintan en la memoria de video. La pantalla muestra ese tablero en agua hasta que el Jugador 1 le dispare.
+
+### Fase de batalla
+
+```mermaid
+flowchart TD
+    V(["Vuelta del lazo"]) --> LEER["Leer botones y calcular flancos<br/>Atender UART: un byte como máximo"]
+    LEER --> RST{"¿Flanco de BTN_RST?"}
+    RST -->|"sí"| NP(["NUEVA_PARTIDA"])
+    RST -->|"no"| T{"turno"}
+    T -->|"J1"| BOT{"¿Qué botón tuvo flanco?"}
+    BOT -->|"ninguno o BTN_SEL"| V
+    BOT -->|"flecha"| MOV["Mover cursor sobre el tablero rival"] --> V
+    BOT -->|"BTN_OK"| D1["tablero = tablero_j2<br/>casilla = cursor"]
+    T -->|"J2"| U{"¿Trama Disparo lista?"}
+    U -->|"no"| V
+    U -->|"sí"| D2["tablero = tablero_j1<br/>casilla = la de la trama"]
+    D1 --> PD{"PROCESAR_DISPARO"}
+    D2 --> PD
+    PD -->|"repetido"| RP["Si tiró J2: UART Disparo dado, repetido"] --> V
+    PD -->|"fallo, impacto o hundido"| ACT["disparos del tirador + 1<br/>Pintar la casilla en VGA<br/>Buzzer según el resultado<br/>UART: Disparo dado si tiró J2,<br/>Disparo recibido si tiró J1"]
+    ACT --> H{"¿Hundido?"}
+    H -->|"no"| CT["Cambiar turno<br/>HUD de turno<br/>UART: Estado turno"]
+    H -->|"sí"| HS["hundidos del tirador + 1"] --> G{"¿hundidos = 3?"}
+    G -->|"no"| CT
+    CT --> V
+    G -->|"sí"| FIN(["Fin de partida"])
+```
+
+Los dos jugadores comparten el mismo camino desde `PROCESAR_DISPARO`. Lo único que cambia es de dónde sale la casilla (el cursor o la trama UART) y a qué tablero apunta. `PROCESAR_DISPARO` revisa primero si la casilla ya fue disparada. Si lo fue, el disparo se ignora y el turno no cambia. Si no, marca impacto o fallo, suma el impacto al barco y avisa si el barco quedó hundido. Todo disparo válido pasa el turno al otro jugador, acierte o no.
+
+Mientras es el turno del Jugador 2, las tramas se siguen leyendo en cada vuelta y cualquier trama que no sea Disparo se descarta. Mientras es el turno del Jugador 1, una trama Disparo del Jugador 2 también se descarta.
+
+### Fin de partida
+
+```mermaid
+flowchart TD
+    E(["Fin de partida"]) --> F["fase = resultado, LED = 10"]
+    F --> HUD["Pintar en el HUD el color del ganador"]
+    HUD --> BZ["Buzzer: victoria"]
+    BZ --> M["ganadas_bcd del ganador + 1<br/>Escribir displays"]
+    M --> U["UART: Estado fin con el ganador<br/>UART: Resumen"]
+    U --> V(["Vuelta del lazo"])
+    V --> LEER["Leer botones y calcular flancos<br/>Atender UART y descartar tramas"]
+    LEER --> RST{"¿Flanco de BTN_RST?"}
+    RST -->|"no"| V
+    RST -->|"sí"| NP(["NUEVA_PARTIDA"])
+```
+
+La pantalla de resultado se queda hasta que el Jugador 1 presiona `BTN_RST`. El resumen lleva los disparos y los barcos hundidos de cada jugador.
+
+### Privacidad de las flotas
+
+La privacidad se cumple en los dos únicos puntos por donde el programa saca información:
+
+- **Memoria de video.** Al pintar una casilla de `tablero_j2`, el estado `01` (barco sin disparar) se escribe como `000` (agua). Solo los estados `10` y `11` se pintan con su color.
+- **UART.** Ninguna trama lleva el contenido de `tablero_j1`. La PC solo conoce ese tablero por los resultados de sus propios disparos, en los mensajes Disparo dado.
+
 ## Funcionamiento en conjunto
 
 Para transmitir un byte, el programa escribe en `0x0001_0044` y luego activa `send` en `0x0001_0040`. El decodificador de direcciones selecciona UART; sus registros alimentan `uart_tx`, que serializa el dato hacia la PC. Para recibirlo, `uart_rx` carga `reg_rx`, sube `new_rx` y el programa puede consultar `0x0001_0040`, leer `0x0001_0048` y limpiar la bandera. Las esperas del enlace se gestionan por sondeo de esos bits; UART no decide las jugadas.
