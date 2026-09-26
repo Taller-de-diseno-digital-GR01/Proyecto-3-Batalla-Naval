@@ -174,7 +174,7 @@ Recupera los bytes que llegan por `rx_i`.
 
 Sobremuestreo a 16 veces el baudaje con un divisor de 54 ciclos, una máquina de cuatro estados que cae al centro de cada bit, y un detector de flanco que produce `o_dato_listo`. El detalle está en [`NUCLEO_UART_RX.md`](../modulos/NUCLEO_UART_RX.md).
 
-Los archivos `arbitro_uart.sv`, `receptor_uart.sv` y `transmisor_uart.sv` también están en `src/design/`, pero proceden del Proyecto 2. El diseño del Proyecto 3 tiene **un único maestro del periférico, el procesador**, y no coloca ese árbitro entre CPU y UART. Sus docs en `../modulos/` quedan como referencia. El periférico todavía no aparece instanciado en un `top.sv` del sistema completo.
+El diseño del Proyecto 3 tiene **un único maestro del periférico, el procesador**, así que el árbitro, el receptor y el transmisor del Proyecto 2 no existen acá, su trabajo lo hace la ROM. El periférico todavía no aparece instanciado en un `top.sv` del sistema completo.
 
 ## VGA
 Este bloque corresponde al módulo que conecta al procesador (CPU) con el monitor mediante el estándar de video VGA. La ficha completa, con los puntos a) a j), está en [`modulos/PERIFERICO_VGA.md`](../modulos/PERIFERICO_VGA.md).
