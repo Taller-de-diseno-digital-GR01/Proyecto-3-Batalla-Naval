@@ -136,8 +136,6 @@ central a `BTN_OK`, como dice `nivel01.md`. `BTN_SEL` y `BTN_RST` van a los mism
 Proyecto 2, N17 y P18, con los mismos dos botones externos. `BTN_RST` es el botón rojo. Pasarlos a switches
 no sirve, un switch no vuelve solo y cada confirmación o reinicio serían dos movimientos.
 
-TODO: Revisar que el botón rojo sea el que está cableado a P18, si es el de N17 se cambian los dos pines en la lista del inciso j).
-
 ### Reset y BTN_RST
 
 `rst_i` es el reinicio general. Después de `rst_i` los siete bits se leen en cero, que es lo correcto porque
