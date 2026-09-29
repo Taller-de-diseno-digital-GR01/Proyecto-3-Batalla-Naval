@@ -8,8 +8,8 @@ PERIFERICO_ENTRADAS, módulo `periferico_entradas` en `src/design/periferico_ent
 
 ```mermaid
 flowchart LR
-    IN_WE(["write_enable_i<br/>(AND_WE)"]) --> PE["PERIFERICO_ENTRADAS<br/>0x0001_0120 a 0x0001_012F"]
-    IN_ADDR(["addr_i[1:0]<br/>(DataAddress_o[3:2])"]) --> PE
+    IN_WE(["write_enable_i<br/>(gpio_we = 0)"]) --> PE["PERIFERICO_ENTRADAS<br/>0x0001_0120"]
+    IN_ADDR(["addr_i[1:0]<br/>(2'b00 fijo)"]) --> PE
     IN_WD(["wdata_i[31:0]<br/>(DataOut_o)"]) --> PE
     IN_BTN(["botones_i[6:0]<br/>(botones del Jugador 1)"]) --> PE
     PE --> OUT_RD(["rdata_o[31:0]<br/>(MUX_LECTURA)"])
@@ -28,9 +28,10 @@ solo registra los pines y los entrega cuando el CPU lee esa dirección.
 ## d) Entradas
 
 - `clk_i`, `rst_i`.
-- `write_enable_i`, habilitación de escritura, desde `AND_WE` del bus de datos. El periférico no tiene nada
-  que escribir y la ignora, está solo porque es parte de la interfaz estándar de la sección 4.5.5.
-- `addr_i[1:0]`, dirección del registro, sale de `DataAddress_o[3:2]` del CPU.
+- `write_enable_i`, habilitación de escritura, desde `gpio_we` del controlador de mapeo, que el Address
+  Translator deja siempre en cero porque el registro es de solo lectura. El periférico igual la ignora, está
+  solo porque es parte de la interfaz estándar de la sección 4.5.5.
+- `addr_i[1:0]`, dirección del registro, fija en `2'b00` en el top, ver el inciso f).
 - `wdata_i[WIDTH-1:0]`, desde `DataOut_o` del CPU. Se ignora igual que `write_enable_i`.
 - `botones_i[6:0]`, los siete botones del Jugador 1 directo de los pines, activos en alto. El orden es el
   mismo de los bits del registro, `botones_i[0]` es `BTN_ARRIBA` y `botones_i[6]` es `BTN_RST`.
@@ -46,9 +47,10 @@ El módulo tiene el parámetro `WIDTH = 32`.
 
 Habla con un solo maestro, el CPU, a través de `BUS_DATOS`. No instancia ningún submódulo.
 
-La decodificación de dirección es la sencilla. En el bloque de 16 bytes de `0x0001_0120` no hay otro
-periférico, así que `sel_entradas` sale de comparar `DataAddress_o[31:4]` contra `0x0001_012`, igual que la
-UART. El periférico ocupa `0x0001_0120` a `0x0001_012F` aunque solo use la primera palabra.
+La dirección la decodifica el Address Translator del controlador de mapeo, detallado en
+`Address_Translator.md`. `sel_gpio` sale de comparar la dirección completa contra `0x0001_0120`, y solo esa
+palabra pone `mux_sel` en la entrada de botones. Por eso en el top `addr_i` va fijo en `2'b00`, igual que en
+los displays, el LED y el buzzer.
 
 Hacia afuera los pines van a los cinco botones de la Basys 3 y a dos botones externos en el Pmod JC.
 
@@ -91,7 +93,9 @@ es el que propone la investigación previa (sección 6.3).
   - `[5]`, `BTN_OK`, confirma una colocación o un disparo.
   - `[6]`, `BTN_RST`, reinicia la partida conservando los contadores de ganadas.
   - `[31:7]`, reservados, se leen en cero.
-- `2'b01`, `2'b10` y `2'b11` (`0x0001_0124` a `0x0001_012C`), sin asignar. Las lecturas devuelven ceros.
+
+`0x0001_0124` a `0x0001_012C` no son de este periférico. El AT las trata como direcciones sin destino y una
+lectura devuelve cero desde `MUX_LECTURA`.
 
 Las escrituras no tienen efecto en ninguna dirección. Lo que hace cada botón en el juego lo decide el
 programa, la lista solo dice para qué lo va a usar.
@@ -185,11 +189,10 @@ Conexiones en el top.
 
 - `clk_i`, al reloj global de 100 MHz, pin W5.
 - `rst_i`, al reinicio general del sistema, nunca a `BTN_RST`.
-- `write_enable_i`, a la salida de `AND_WE`, en alto solo cuando `we_o` está en alto y `DataAddress_o` cae
-  entre `0x0001_0120` y `0x0001_012F`.
-- `addr_i[1:0]`, a `DataAddress_o[3:2]`.
+- `write_enable_i`, a `gpio_we` del controlador de mapeo, que siempre vale cero.
+- `addr_i[1:0]`, a `2'b00`.
 - `wdata_i[31:0]`, a `DataOut_o`.
-- `rdata_o[31:0]`, a `MUX_LECTURA`, que alimenta `DataIn_i` del CPU.
+- `rdata_o[31:0]`, a `MUX_LECTURA`, que alimenta `DataIn_i` del CPU. En `Address_Translator.md` es la entrada `gpio_dout`, que el AT elige con `mux_sel = 010`.
 - `botones_i[6:0]`, a los siete puertos de botón del top en el orden de la lista de arriba.
 
 Igual que en los demás módulos, el diagrama por chips que pide el método no aplica a un diseño que se
