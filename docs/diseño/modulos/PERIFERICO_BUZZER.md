@@ -120,10 +120,8 @@ combinacional, igual que en la UART, así que un `lw` tiene el dato en el mismo 
 ### Reset
 
 `rst_i` es síncrono, igual que en la UART, y deja el registro en `000` y el secuenciador en reposo.
-Si `BTN_RST` termina siendo un reinicio por software, el programa tiene que escribir `000` al buzzer
-como parte de su rutina de reinicio para cortar una melodía que venga sonando.
-
-TODO: Revisar si `BTN_RST` llega a `rst_i` de los periféricos o si lo atiende el programa.
+`BTN_RST` no llega a `rst_i`, lo atiende el programa, así que tiene que escribir `000` al buzzer como
+parte de su rutina de reinicio para cortar una melodía que venga sonando.
 
 ### Latches
 
