@@ -10,18 +10,10 @@ flowchart TD
     ROM["ROM de programa"]
     RAM["RAM de datos"]
 
-    subgraph MAP["CONTROLADOR_MAPEO - propuesta"]
-        DIR["Decodificación de rangos"]
-        CMP_UART["Comparador UART<br/>0x0001_0040-0x0001_004F"]
-        AND_WE["Habilitación de escritura UART<br/>we_o y sel_uart"]
-        CMP_VGA["Comparador VGA<br/>0x0001_1000-0x0001_17FF"]
-        AND_WE_VGA["Habilitación de escritura VGA<br/>we_o y sel_vga"]
+    subgraph MAP["CONTROLADOR_MAPEO"]
+        AT["ADDRESS_TRANSLATOR<br/>compara DataAddress_o con el mapa"]
         RMUX["MUX_LECTURA"]
-        DIR --> CMP_UART
-        CMP_UART -->|"sel_uart"| AND_WE
-        DIR --> CMP_VGA
-        CMP_VGA -->|"sel_vga"| AND_WE_VGA
-        DIR -->|"selección del destino"| RMUX
+        AT -->|"mux_sel[2:0]"| RMUX
     end
 
     subgraph GPIO["PERIFERICO_ENTRADAS"]
@@ -52,62 +44,75 @@ flowchart TD
     VGA["PERIFERICO_VGA<br/>detalle en la sección VGA"]
     MON["Monitor VGA"]
 
-    subgraph DISP["DISPLAY Y LED - propuesta"]
-        DREG["Registro de datos"] --> SCAN["Selector y decodificador"]
+    subgraph P7["PERIFERICO_7SEG"]
+        DREG["REG_DIGITOS<br/>4 dígitos BCD y 4 puntos"] --> MARC["MARCADOR<br/>barrido de 4 dígitos"]
     end
 
-    subgraph BUZ["BUZZER - propuesta"]
-        BREG["Registro de evento"] --> TONE["Generador de tono"]
+    subgraph PLED["PERIFERICO_LED"]
+        LREG["REG_LEDS<br/>un bit por fase"]
+    end
+
+    subgraph BUZ["PERIFERICO_BUZZER"]
+        BREG["REG_SONIDO<br/>código de 3 bits"] --> SEQ["SECUENCIADOR_MELODIA"]
+        SEQ --> TONE["GENERADOR_TONO"]
     end
 
     CPU -->|"ProgAddress_o"| ROM
     ROM -->|"ProgIn_i"| CPU
-    CPU -->|"DataAddress_o, DataOut_o, we_o"| DIR
+    CPU -->|"DataAddress_o, we_o"| AT
     RMUX -->|"DataIn_i"| CPU
-    DIR --> RAM
+    AT -->|"ram_we"| RAM
     RAM --> RMUX
-    DIR --> BTNREG
-    BTNREG --> RMUX
-    DIR -->|"we_o"| AND_WE
-    DIR -->|"addr_i = DataAddress_o[3:2]<br/>wdata_i = DataOut_o"| DEC_UART
-    AND_WE -->|"write_enable_i"| DEC_UART
+    AT -->|"gpio_we = 0"| BTNREG
+    BTNREG -->|"rdata_o"| RMUX
+    AT -->|"uart_we como write_enable_i"| DEC_UART
+    CPU -->|"addr_i = DataAddress_o[3:2]<br/>wdata_i = DataOut_o"| DEC_UART
     MUX_UART -->|"rdata_o"| RMUX
-    DIR -->|"we_o"| AND_WE_VGA
-    DIR -->|"addr_i = DataAddress_o[10:2]<br/>wdata_i = DataOut_o"| VGA
-    AND_WE_VGA -->|"write_enable_i"| VGA
+    AT -->|"vga_we como write_enable_i"| VGA
+    CPU -->|"addr_i = DataAddress_o[10:2]<br/>wdata_i = DataOut_o"| VGA
     VGA -->|"rdata_o"| RMUX
     VGA -->|"vga_hsync_o, vga_vsync_o<br/>vga_r_o, vga_g_o, vga_b_o"| MON
-    DIR --> DREG
-    DIR --> BREG
+    AT -->|"display_we"| DREG
+    AT -->|"led_we"| LREG
+    AT -->|"buzzer_we"| BREG
+    DREG -->|"rdata_o"| RMUX
+    LREG -->|"rdata_o"| RMUX
+    BREG -->|"rdata_o"| RMUX
+    MARC -->|"seg_o, an_o, dp_o"| D7["Display de 7 segmentos"]
+    LREG -->|"leds_o"| LEDS["LD0 a LD2"]
+    TONE -->|"buzzer_o"| ZUMB["Buzzer"]
     APP["Aplicación de PC"] -->|"rx_i"| RX
     TX -->|"tx_o"| APP
 ```
 
-El procesador aparece como **un solo bloque**, sin mostrar sus partes internas. ROM y RAM son bloques separados: ROM entrega instrucciones directamente al procesador y RAM comparte el camino de datos con los periféricos. Dentro de `CONTROLADOR_MAPEO` se muestran la decodificación, el comparador de UART, la habilitación de escritura y el multiplexor de lectura; son **conexiones propuestas**, aún sin RTL de integración. Los registros y núcleos de `PERIFERICO_UART` sí corresponden a `src/design/periferico_uart.sv`, `uart_tx.sv` y `uart_rx.sv`. `clk_i` y `rst_i` llegan al periférico UART, aunque no se repitan en cada registro del dibujo.
+El procesador aparece como **un solo bloque**, sin mostrar sus partes internas. ROM y RAM son bloques separados: ROM entrega instrucciones directamente al procesador y RAM comparte el camino de datos con los periféricos. Dentro de `CONTROLADOR_MAPEO` están el Address Translator y el multiplexor de lectura. El AT solo recibe `DataAddress_o` y `we_o`, así que `DataOut_o` y los `addr_i` salen del procesador directo hacia cada destino, como dice [`Address_Translator.md`](../modulos/Address_Translator.md). A entradas, displays, LED y buzzer les llega `wdata_i = DataOut_o` y `addr_i` fijo en `2'b00`, que no se dibujan. Son **conexiones propuestas**, aún sin RTL de integración. Los registros y núcleos de `PERIFERICO_UART` sí corresponden a `src/design/periferico_uart.sv`, `uart_tx.sv` y `uart_rx.sv`. `clk_i` y `rst_i` llegan al periférico UART, aunque no se repitan en cada registro del dibujo.
 
 ## Observaciones de integración
 
 - **Entradas.** Los botones se registran y se exponen en un solo registro de lectura, sin antirrebote en hardware. El programa saca los flancos y decide cómo usar cada pulsación. El detalle está en [`PERIFERICO_ENTRADAS.md`](../modulos/PERIFERICO_ENTRADAS.md).
-- **Display y LED.** Se proponen registros mapeados para el contador de victorias y la fase del juego, más un selector de dígito y un decodificador de segmentos. La distribución concreta de bits sigue pendiente.
-- **Buzzer.** Se propone un registro para seleccionar el evento y un generador de tono. El programa determina qué evento ocurrió.
+- **Displays.** `REG_DIGITOS` guarda cuatro dígitos BCD y cuatro puntos decimales, el Jugador 1 en `AN3` y `AN2` y el Jugador 2 en `AN1` y `AN0`. El programa lleva los contadores en BCD y `marcador` hace el barrido. El detalle está en [`PERIFERICO_7SEG.md`](../modulos/PERIFERICO_7SEG.md).
+- **LED.** `REG_LEDS` tiene un bit por fase, LD0 colocación, LD1 batalla y LD2 resultado, y el programa escribe `0x1`, `0x2` o `0x4`. El detalle está en [`PERIFERICO_LED.md`](../modulos/PERIFERICO_LED.md).
+- **Buzzer.** `REG_SONIDO` recibe el código de una de las cinco melodías, `secuenciador_melodia` la recorre y `generador_tono` saca la onda. El programa decide qué evento ocurrió y qué código escribir. El detalle está en [`PERIFERICO_BUZZER.md`](../modulos/PERIFERICO_BUZZER.md).
 - **Aplicación de PC.** Envía y recibe bytes por UART; la interpretación de colocaciones, turnos y disparos corresponde al programa ejecutado por el procesador. El periférico UART solo transporta bytes.
 
 ## Controlador de mapeo
 
 Este bloque se sitúa entre el bus de datos del procesador y la RAM o los periféricos. Recibe `DataAddress_o`, `DataOut_o` y `we_o`; devuelve por `DataIn_i` el dato del destino seleccionado. La ROM de programa usa su propio camino hacia el procesador y no pasa por este controlador. La lógica del controlador **solo encamina accesos**: no decide turnos, disparos ni resultados del juego.
 
-El decodificador compara la dirección completa con el mapa de memoria y genera una selección para un único destino. La RAM ocupa `0x0000_2000`–`0x0000_2FFF`; UART, `0x0001_0040`–`0x0001_004F`; y VGA, `0x0001_1000`–`0x0001_17FF`. Los registros de botones, display, LED y buzzer se seleccionan en sus direcciones respectivas. En particular, display (`0x0001_0130`) y LED (`0x0001_0138`) **no** pueden distinguirse comparando solo `DataAddress_o[31:4]`, porque comparten esos bits altos. Por eso los dos comparan `DataAddress_o[31:3]`, y al LED le llega `addr_i = {1'b0, DataAddress_o[2]}` para que `0x0001_0138` entre como `2'b00`. El detalle está en `PERIFERICO_7SEG.md` y `PERIFERICO_LED.md`.
+La decodificación la hace el Address Translator. Compara la dirección completa con la tabla de la sección 4.4.2 del enunciado y selecciona un único destino. RAM y VGA se seleccionan por ventana, `0x0000_2000`–`0x0000_2FFF` y `0x0001_1000`–`0x0001_17FF`. La UART solo en `0x0001_0040`, `0x0001_0044` y `0x0001_0048`, y botones, display, LED y buzzer solo en `0x0001_0120`, `0x0001_0130`, `0x0001_0138` y `0x0001_0140`. Como la comparación es exacta, display y LED no se cruzan aunque compartan el bloque de 16 bytes de `0x0001_0130`.
 
-En una escritura, `DataOut_o` llega al destino, pero su habilitación se activa únicamente cuando coinciden `we_o` y la señal de selección correspondiente. Para UART se propone `write_enable_i = we_o && sel_uart`, donde `sel_uart` resulta de comparar `DataAddress_o[31:4]` con `0x0001004`; `DataAddress_o[3:2]` escoge internamente los registros de control, TX o RX mediante `addr_i[1:0]`. El controlador debe generar habilitaciones equivalentes e independientes para RAM y los demás destinos, evitando que un `sw` a uno modifique otro.
+Esos cuatro periféricos tienen un solo registro, en el offset `0x00`, y reciben `addr_i` fijo en `2'b00`. Pasarles `DataAddress_o[3:2]` como a la UART no serviría para el LED, porque en `0x0001_0138` esos bits valen `2'b10`. Es la adaptación de dirección que el AT deja a las conexiones de fuera, igual que el índice de la UART, la RAM y el VGA.
 
-En una lectura, `MUX_LECTURA` selecciona el dato de RAM o la salida `rdata_o` del periférico indicado y lo entrega a `DataIn_i`. Para direcciones sin destino se propone devolver cero y no habilitar ninguna escritura; también deben definirse los accesos no alineados. Como el procesador es uniciclo, el camino de lectura y su latencia se tendrán que comprobar al integrar la RAM y los periféricos. Estas conexiones del controlador son todavía una propuesta, no RTL ya implementado.
+En una escritura, `DataOut_o` llega al destino, pero su habilitación se activa únicamente cuando coinciden `we_o` y la señal de selección correspondiente. Para UART es `uart_we = we_o && sel_uart`, que llega como `write_enable_i`, y `DataAddress_o[3:2]` escoge internamente los registros de control, TX o RX mediante `addr_i[1:0]`. El AT genera habilitaciones equivalentes e independientes para los demás destinos (`ram_we`, `display_we`, `led_we`, `buzzer_we`, `vga_we`, y `gpio_we` fijo en cero), así que un `sw` a uno no modifica otro.
+
+En una lectura, `MUX_LECTURA`, el MUX de lectura externo de `Address_Translator.md`, selecciona el dato de RAM o la salida `rdata_o` del periférico indicado y lo entrega a `DataIn_i`. Para direcciones sin destino, incluidas `0x0001_004C` y las no alineadas, el AT pone `mux_sel` en `111`, el MUX devuelve cero y no se habilita ninguna escritura. Como el procesador es uniciclo, el camino de lectura y su latencia se tendrán que comprobar al integrar la RAM y los periféricos. Estas conexiones del controlador son todavía una propuesta, no RTL ya implementado.
 
 ## PERIFERICO_UART
 
 El bloque sigue [`periferico_uart.sv`](../../../src/design/periferico_uart.sv) y sus dos submódulos [`uart_tx.sv`](../../../src/design/uart_tx.sv) y [`uart_rx.sv`](../../../src/design/uart_rx.sv). La ficha completa, con los puntos a) a j), está en [`PERIFERICO_UART.md`](../modulos/PERIFERICO_UART.md).
 
 - **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Los pines seriales son `rx_i` (B18) y `tx_o` (A18).
-- **Selección.** El controlador compara `DataAddress_o[31:4]` con `0x0001004` para obtener `sel_uart`, la escritura se habilita con `write_enable_i = we_o && sel_uart`, y `DataAddress_o[3:2]` llega como `addr_i`. Se comparan los 28 bits altos y no solo algunos, para que la UART no aparezca repetida en otras direcciones del espacio de periféricos.
+- **Selección.** El Address Translator activa `sel_uart` solo en `0x0001_0040`, `0x0001_0044` y `0x0001_0048`, la escritura se habilita con `uart_we = we_o && sel_uart`, que llega como `write_enable_i`, y `DataAddress_o[3:2]` llega como `addr_i`. Como compara la dirección completa, la UART no aparece repetida en otras direcciones del espacio de periféricos, y `0x0001_004C` no la selecciona aunque caiga en su bloque de 16 bytes.
 
 `escribir_tx`, `escribir_ctrl` y `escribir_rx` no son señales con nombre en el `.sv`, son las condiciones `write_enable_i && addr_i == ...` de cada `always_ff`.
 
