@@ -120,11 +120,9 @@ Después de `rst_i` el registro queda en cero y el display muestra `00 00`, que 
 arrancar el sistema.
 
 El enunciado pide que `BTN_RST` reinicie la partida conservando las ganadas. Si `BTN_RST` llegara a `rst_i`
-de este periférico, el display se iría a `00 00` en cada reinicio de partida. `rst_i` tiene que ser el
-reinicio general, y `BTN_RST` lo atiende el programa. Si al final `BTN_RST` sí llega a `rst_i`, el programa
-tiene que volver a escribir el registro con los contadores que guarda en RAM después de cada reinicio.
-
-TODO: Revisar cuál es el reinicio general del sistema, el enunciado no lo define. Es la misma pregunta abierta que en `PERIFERICO_BUZZER.md`.
+de este periférico, el display se iría a `00 00` en cada reinicio de partida. Por eso `rst_i` es
+solo el reinicio general, que es lo único que pone el marcador en cero, y `BTN_RST` lo atiende el programa
+sin tocar este registro.
 
 ### Latches
 
