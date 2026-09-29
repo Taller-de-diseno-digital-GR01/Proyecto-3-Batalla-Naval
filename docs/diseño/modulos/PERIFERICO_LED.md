@@ -125,8 +125,6 @@ inicialización, antes de entrar al lazo, así que el tiempo con los LEDs apagad
 `BTN_RST` no llega a `rst_i`. Al reiniciar la partida el programa vuelve a escribir `0x1` y se enciende
 colocación, que es la fase en la que arranca la partida nueva.
 
-TODO: Revisar cuál es el reinicio general del sistema, el enunciado no lo define. Es la misma pregunta abierta que en `PERIFERICO_7SEG.md` y `PERIFERICO_BUZZER.md`.
-
 ### Latches
 
 `REG_LEDS` va en un `always_ff` con reset síncrono. La lectura es un `always_comb` con `case` y rama
