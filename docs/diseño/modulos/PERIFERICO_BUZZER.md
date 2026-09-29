@@ -8,8 +8,8 @@ PERIFERICO_BUZZER, módulo `periferico_buzzer` en `src/design/periferico_buzzer.
 
 ```mermaid
 flowchart LR
-    IN_WE(["write_enable_i<br/>(AND_WE)"]) --> PBUZ["PERIFERICO_BUZZER<br/>0x0001_0140 a 0x0001_014F"]
-    IN_ADDR(["addr_i[1:0]<br/>(DataAddress_o[3:2])"]) --> PBUZ
+    IN_WE(["write_enable_i<br/>(buzzer_we)"]) --> PBUZ["PERIFERICO_BUZZER<br/>0x0001_0140"]
+    IN_ADDR(["addr_i[1:0]<br/>(2'b00 fijo)"]) --> PBUZ
     IN_WD(["wdata_i[31:0]<br/>(DataOut_o)"]) --> PBUZ
     PBUZ --> OUT_RD(["rdata_o[31:0]<br/>(MUX_LECTURA)"])
     PBUZ --> OUT_BUZ(["buzzer_o<br/>(pin M18, JC2)"])
@@ -31,9 +31,9 @@ Decidir que un disparo fue impacto, o que el impacto hundió un barco, es trabaj
 ## d) Entradas
 
 - `clk_i`, `rst_i`.
-- `write_enable_i`, habilitación de escritura, desde `AND_WE` del bus de datos (`we_o` del CPU en AND
-  con `sel_buzzer`).
-- `addr_i[1:0]`, dirección del registro, sale de `DataAddress_o[3:2]` del CPU.
+- `write_enable_i`, habilitación de escritura, desde `buzzer_we` del controlador de mapeo (`we_o` del
+  CPU en AND con `sel_buzzer`).
+- `addr_i[1:0]`, dirección del registro, fija en `2'b00` en el top, ver el inciso f).
 - `wdata_i[WIDTH-1:0]`, dato a escribir, desde `DataOut_o` del CPU.
 
 El módulo tiene los parámetros `WIDTH = 32`, `CLK_FREQ_HZ = 100_000_000` y `UNIDAD_MS = 50`. Los dos
@@ -47,10 +47,11 @@ El módulo tiene los parámetros `WIDTH = 32`, `CLK_FREQ_HZ = 100_000_000` y `UN
 
 ## f) Relación con otros módulos
 
-Igual que la UART, habla con un solo maestro, el CPU, a través de `BUS_DATOS`. El decodificador
-compara `DataAddress_o[31:4]` contra `0x0001014` para sacar `sel_buzzer`. En ese bloque de 16 bytes no
-hay ningún otro periférico, así que el buzzer se decodifica igual que la UART, sin el problema que
-tienen los displays y el LED en `0x0001_0130` y `0x0001_0138`.
+Igual que la UART, habla con un solo maestro, el CPU, a través de `BUS_DATOS`. La dirección la
+decodifica el Address Translator del controlador de mapeo, detallado en `Address_Translator.md`, que
+compara la dirección completa contra `0x0001_0140` para sacar `sel_buzzer`. Solo esa palabra llega al
+periférico, así que en el top `addr_i` va fijo en `2'b00`, igual que en las entradas, los displays y el
+LED.
 
 Adentro instancia `SECUENCIADOR_MELODIA` y `GENERADOR_TONO`, que solo usa este módulo y tienen su
 propio doc en `secuenciador_melodia.md` y `generador_tono.md`.
@@ -85,8 +86,9 @@ La tabla de la sección 4.4.3 del enunciado fija un solo registro de control en 
 - `2'b00` (`0x0001_0140`), registro de sonido. Bits `[2:0]` son el código de la melodía (RW, el
   hardware lo limpia al terminar), `[31:3]` son reservados, se leen en cero y las escrituras sobre
   ellos se ignoran.
-- `2'b01`, `2'b10` y `2'b11` (`0x0001_0144` a `0x0001_014C`), sin asignar. Las lecturas devuelven
-  ceros y las escrituras no tienen efecto.
+
+`0x0001_0144` a `0x0001_014C` no son de este periférico. El AT las trata como direcciones sin destino,
+así que ninguna escritura las habilita y una lectura devuelve cero desde `MUX_LECTURA`.
 
 Los códigos están en `secuenciador_melodia.md`. `000` es silencio, `001` a `101` son las cinco
 melodías, y `110` y `111` se comportan como silencio.
@@ -111,7 +113,8 @@ arrancar una melodía.
 
 ### Lectura
 
-`rdata_o` vale `{29'b0, reg_sonido}` con `addr_i = 2'b00` y cero en las otras tres direcciones. Es
+`rdata_o` vale `{29'b0, reg_sonido}` con `addr_i = 2'b00` y cero en las otras tres, que con `addr_i`
+fijo no llegan nunca. Es
 combinacional, igual que en la UART, así que un `lw` tiene el dato en el mismo ciclo.
 
 ### Reset
@@ -167,11 +170,11 @@ Conexiones en el top.
 
 - `clk_i`, al reloj global de 100 MHz, pin W5.
 - `rst_i`, al reset del sistema.
-- `write_enable_i`, a la salida de `AND_WE`, en alto solo cuando `we_o` está en alto y
-  `DataAddress_o` cae entre `0x0001_0140` y `0x0001_014F`.
-- `addr_i[1:0]`, a `DataAddress_o[3:2]`.
+- `write_enable_i`, a `buzzer_we` del controlador de mapeo, en alto solo cuando `we_o` está en alto y
+  `DataAddress_o` es `0x0001_0140`.
+- `addr_i[1:0]`, a `2'b00`.
 - `wdata_i[31:0]`, a `DataOut_o`.
-- `rdata_o[31:0]`, a `MUX_LECTURA`, que alimenta `DataIn_i` del CPU.
+- `rdata_o[31:0]`, a `MUX_LECTURA`, que alimenta `DataIn_i` del CPU. En `Address_Translator.md` es la entrada `buzzer_dout`, que el AT elige con `mux_sel = 101`.
 - `buzzer_o`, al puerto `buzzer` del top.
 
 Igual que en los demás módulos, el diagrama por chips que pide el método no aplica a un diseño que se
