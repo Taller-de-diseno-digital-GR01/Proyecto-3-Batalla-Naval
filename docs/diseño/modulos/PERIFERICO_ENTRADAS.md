@@ -106,11 +106,8 @@ La sección 4.5.2 pide debouncing, pero según el profesor los botones de la Bas
 tarjeta y no hace falta repetirlo en el periférico. Con eso el `debounce` y el detector de flanco de
 `botones.sv` del Proyecto 2 no se traen. El flanco lo saca el programa, como se ve en el inciso g).
 
-Eso vale para los cinco botones de la tarjeta. `BTN_SEL` y `BTN_OK` son botones externos en el Pmod JC y
-no pasan por el filtrado de la Basys 3, así que pueden rebotar. Un rebote en `BTN_OK` se leería como dos
-confirmaciones seguidas, y en la batalla eso puede ser un disparo de más.
-
-TODO: Revisar con el profesor si `BTN_SEL` y `BTN_OK` en el Pmod JC también se pueden leer sin antirrebote, o si se filtran por software en el programa.
+Los dos botones externos de `BTN_SEL` y `BTN_OK` en el Pmod JC tampoco rebotan, así que se leen igual que
+los cinco de la tarjeta y los siete bits del registro se tratan igual.
 
 ### REG_ESTADO
 
@@ -136,7 +133,7 @@ sincronizador.
 
 La Basys 3 trae cinco botones y el enunciado pide siete. Los cuatro de la cruz van a la navegación y el
 central a `BTN_RST`, como dice `nivel01.md`. `BTN_SEL` y `BTN_OK` van a los mismos pines del Pmod JC que en el
-Proyecto 2, N17 y P18, con los mismos dos botones externos. Pasarlos a switches evitaba el rebote, pero un
+Proyecto 2, N17 y P18, con los mismos dos botones externos. Pasarlos a switches no sirve, un
 switch no vuelve solo y cada confirmación serían dos movimientos.
 
 ### Reset y BTN_RST
