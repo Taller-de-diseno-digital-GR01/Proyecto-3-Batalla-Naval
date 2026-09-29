@@ -8,7 +8,7 @@ PERIFERICO_UART
 
 ```mermaid
 flowchart LR
-    IN_WE(["write_enable_i<br/>(uart_we)"]) --> PUART["PERIFERICO_UART<br/>0x0001_0040 a 0x0001_004F"]
+    IN_WE(["write_enable_i<br/>(uart_we)"]) --> PUART["PERIFERICO_UART<br/>0x0001_0040 a 0x0001_0048"]
     IN_ADDR(["addr_i[1:0]<br/>(DataAddress_o[3:2])"]) --> PUART
     IN_WD(["wdata_i[31:0]<br/>(DataOut_o)"]) --> PUART
     IN_RX(["rx_i<br/>(pin B18)"]) --> PUART
@@ -60,9 +60,9 @@ Hacia adentro habla con un solo maestro, el CPU. En el Proyecto 2 había dos
 (`UART_receptor` y `UART_transmisor`) y por eso existía `ARBITRO_UART`. Acá toda esa
 lógica pasa al ensamblador y el periférico ve un único puerto, sin árbitro en el medio.
 
-El periférico ocupa `0x0001_0040` a `0x0001_004F`. El decodificador de direcciones activa
-`write_enable_i` solo cuando la dirección cae en ese rango y le pasa `DataAddress_o[3:2]` como
-`addr_i`. Los registros van de 4 en 4 bytes, así que los dos bits más bajos siempre valen cero y
+El periférico tiene sus registros en `0x0001_0040`, `0x0001_0044` y `0x0001_0048`. El Address
+Translator del controlador de mapeo, detallado en `Address_Translator.md`, activa `uart_we` solo en
+esas tres direcciones, y en el top `DataAddress_o[3:2]` llega como `addr_i`. Los registros van de 4 en 4 bytes, así que los dos bits más bajos siempre valen cero y
 no sirven para distinguir registros.
 
 Hacia afuera habla con la app de PC del Jugador 2. `rx_i` y `tx_o` salen directo a los pines del
@@ -107,8 +107,8 @@ La tabla de la sección 4.4.3 del enunciado fija las tres direcciones. Con base 
   `[31:8]` son reservados y se leen en cero. El enunciado del Proyecto 2 lo declara de escritura
   igual que el de transmisión, así que se implementa escribible aunque en la práctica solo lo
   escribe un testbench.
-- `2'b11` (`0x0001_004C`), sin asignar. Las lecturas devuelven ceros y las escrituras no tienen
-  efecto.
+- `2'b11` (`0x0001_004C`), sin asignar. El AT no selecciona esa dirección, así que nunca llega al
+  periférico. Igual las lecturas devuelven ceros y las escrituras no tienen efecto.
 
 En el Proyecto 2 el control estaba en `2'b10` y los datos en `2'b00` y `2'b01`, porque allá el
 orden lo escogía el equipo. Acá lo fija el enunciado.
@@ -240,10 +240,10 @@ Conexiones en el top:
 - `clk_i`, al reloj global de 100 MHz, pin W5.
 - `rst_i`, al reset del sistema.
 - `write_enable_i`, a `uart_we` del controlador de mapeo, en alto solo cuando `we_o` está en alto y
-  `DataAddress_o` cae entre `0x0001_0040` y `0x0001_004F`.
+  `DataAddress_o` es `0x0001_0040`, `0x0001_0044` o `0x0001_0048`.
 - `addr_i[1:0]`, a `DataAddress_o[3:2]`.
 - `wdata_i[31:0]`, a `DataOut_o`.
-- `rdata_o[31:0]`, a `MUX_LECTURA`, que alimenta `DataIn_i` del CPU.
+- `rdata_o[31:0]`, a `MUX_LECTURA`, que alimenta `DataIn_i` del CPU. En `Address_Translator.md` es la entrada `uart_dout`, que el AT elige con `mux_sel = 001`.
 - `rx_i`, `tx_o`, a los puertos del top con el mismo nombre.
 
 Igual que en los demás módulos, el diagrama por chips que pide el método no aplica a un diseño
