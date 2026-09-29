@@ -8,8 +8,8 @@ PERIFERICO_7SEG, módulo `periferico_7seg` en `src/design/periferico_7seg.sv`.
 
 ```mermaid
 flowchart LR
-    IN_WE(["write_enable_i<br/>(AND_WE)"]) --> P7["PERIFERICO_7SEG<br/>0x0001_0130 a 0x0001_0137"]
-    IN_ADDR(["addr_i[1:0]<br/>(DataAddress_o[3:2])"]) --> P7
+    IN_WE(["write_enable_i<br/>(display_we)"]) --> P7["PERIFERICO_7SEG<br/>0x0001_0130"]
+    IN_ADDR(["addr_i[1:0]<br/>(2'b00 fijo)"]) --> P7
     IN_WD(["wdata_i[31:0]<br/>(DataOut_o)"]) --> P7
     P7 --> OUT_RD(["rdata_o[31:0]<br/>(MUX_LECTURA)"])
     P7 --> OUT_SEG(["seg_o[6:0], dp_o<br/>(cátodos)"])
@@ -30,9 +30,9 @@ y escribe los cuatro dígitos. El hardware solo guarda lo escrito y hace el barr
 ## d) Entradas
 
 - `clk_i`, `rst_i`.
-- `write_enable_i`, habilitación de escritura, desde `AND_WE` del bus de datos (`we_o` del CPU en AND con
-  `sel_7seg`).
-- `addr_i[1:0]`, dirección del registro, sale de `DataAddress_o[3:2]` del CPU.
+- `write_enable_i`, habilitación de escritura, desde `display_we` del controlador de mapeo (`we_o` del CPU en
+  AND con `sel_7seg`).
+- `addr_i[1:0]`, dirección del registro, fija en `2'b00` en el top, ver el inciso f).
 - `wdata_i[WIDTH-1:0]`, dato a escribir, desde `DataOut_o` del CPU.
 
 El módulo tiene los parámetros `WIDTH = 32` y `REFRESH_BITS = 18`. El segundo pasa tal cual a `marcador`.
@@ -50,11 +50,11 @@ El módulo tiene los parámetros `WIDTH = 32` y `REFRESH_BITS = 18`. El segundo 
 Habla con un solo maestro, el CPU, a través de `BUS_DATOS`. Adentro instancia `marcador`, que solo usa este
 módulo y tiene su propio doc en `marcador.md`.
 
-La decodificación de dirección tiene una trampa. El LED de estado está en `0x0001_0138`, dentro del mismo
-bloque de 16 bytes que este periférico, así que `sel_7seg` no puede salir de comparar `DataAddress_o[31:4]`
-como en la UART. Tiene que comparar `DataAddress_o[31:3]` contra `0x0001_0130 >> 3`, y el periférico queda
-en `0x0001_0130` a `0x0001_0137`, con `addr_i` en `2'b00` o `2'b01`. Es el mismo choque que marca el TODO de
-`CMP_UART` en `nivel03.md`.
+La dirección la decodifica el Address Translator del controlador de mapeo, detallado en
+`Address_Translator.md`. `sel_7seg` sale de comparar la dirección completa contra `0x0001_0130`, así que el
+LED en `0x0001_0138` no se cruza con este periférico aunque los dos caigan en el mismo bloque de 16 bytes.
+Como el AT solo selecciona esa palabra, el periférico siempre se accede en su offset `0x00` y en el top
+`addr_i` va fijo en `2'b00`, igual que en las entradas, el LED y el buzzer.
 
 Hacia afuera los pines van al display de la Basys 3.
 
@@ -84,9 +84,9 @@ La tabla de la sección 4.4.3 del enunciado fija un registro de datos en `0x0001
     dígito.
   - `[19:16]`, punto decimal de cada dígito, bit 16 en `AN0`. En alto enciende el punto.
   - `[31:20]`, reservados, se leen en cero y las escrituras sobre ellos se ignoran.
-- `2'b01` (`0x0001_0134`), sin asignar. Las lecturas devuelven ceros y las escrituras no tienen efecto.
-
-`2'b10` y `2'b11` no llegan nunca, porque `0x0001_0138` y `0x0001_013C` son del LED.
+`0x0001_0134` no es de este periférico. El AT la trata como dirección sin destino, así que ninguna escritura
+la habilita y una lectura devuelve cero desde `MUX_LECTURA`. Con `addr_i` fijo, `2'b01` a `2'b11` no llegan
+nunca, y el `case` de lectura igual los cubre con cero.
 
 ### Por qué BCD y no binario
 
@@ -170,11 +170,11 @@ Conexiones en el top.
 
 - `clk_i`, al reloj global de 100 MHz, pin W5.
 - `rst_i`, al reinicio general del sistema.
-- `write_enable_i`, a la salida de `AND_WE`, en alto solo cuando `we_o` está en alto y `DataAddress_o` cae
-  entre `0x0001_0130` y `0x0001_0137`.
-- `addr_i[1:0]`, a `DataAddress_o[3:2]`.
+- `write_enable_i`, a `display_we` del controlador de mapeo, en alto solo cuando `we_o` está en alto y
+  `DataAddress_o` es `0x0001_0130`.
+- `addr_i[1:0]`, a `2'b00`.
 - `wdata_i[31:0]`, a `DataOut_o`.
-- `rdata_o[31:0]`, a `MUX_LECTURA`, que alimenta `DataIn_i` del CPU.
+- `rdata_o[31:0]`, a `MUX_LECTURA`, que alimenta `DataIn_i` del CPU. En `Address_Translator.md` es la entrada `display_dout`, que el AT elige con `mux_sel = 011`.
 - `seg_o`, `an_o` y `dp_o`, a los puertos `seg`, `an` y `dp` del top.
 
 Igual que en los demás módulos, el diagrama por chips que pide el método no aplica a un diseño que se
