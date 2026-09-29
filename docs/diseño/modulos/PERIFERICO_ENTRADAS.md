@@ -106,7 +106,7 @@ La sección 4.5.2 pide debouncing, pero según el profesor los botones de la Bas
 tarjeta y no hace falta repetirlo en el periférico. Con eso el `debounce` y el detector de flanco de
 `botones.sv` del Proyecto 2 no se traen. El flanco lo saca el programa, como se ve en el inciso g).
 
-Los dos botones externos de `BTN_SEL` y `BTN_OK` en el Pmod JC tampoco rebotan, así que se leen igual que
+Los dos botones externos de `BTN_SEL` y `BTN_RST` en el Pmod JC tampoco rebotan, así que se leen igual que
 los cinco de la tarjeta y los siete bits del registro se tratan igual.
 
 ### REG_ESTADO
@@ -129,12 +129,14 @@ sincronizador.
 | `2'b00`    | `{{(WIDTH-7){1'b0}}, estado}`     |
 | resto      | `0`                               |
 
-### Pines de BTN_SEL y BTN_OK
+### Pines de BTN_SEL y BTN_RST
 
 La Basys 3 trae cinco botones y el enunciado pide siete. Los cuatro de la cruz van a la navegación y el
-central a `BTN_RST`, como dice `nivel01.md`. `BTN_SEL` y `BTN_OK` van a los mismos pines del Pmod JC que en el
-Proyecto 2, N17 y P18, con los mismos dos botones externos. Pasarlos a switches no sirve, un
-switch no vuelve solo y cada confirmación serían dos movimientos.
+central a `BTN_OK`, como dice `nivel01.md`. `BTN_SEL` y `BTN_RST` van a los mismos pines del Pmod JC que en el
+Proyecto 2, N17 y P18, con los mismos dos botones externos. `BTN_RST` es el botón rojo. Pasarlos a switches
+no sirve, un switch no vuelve solo y cada confirmación o reinicio serían dos movimientos.
+
+TODO: Revisar que el botón rojo sea el que está cableado a P18, si es el de N17 se cambian los dos pines en la lista del inciso j).
 
 ### Reset y BTN_RST
 
@@ -146,7 +148,7 @@ nadie está presionando nada al arrancar.
 `BTN_RST` es un bit más del registro, y el reinicio de la partida lo hace el programa, que es lo que ya dice
 `nivel01.md`.
 
-TODO: Revisar cuál es el reinicio general del sistema, el enunciado no lo define. Es la misma pregunta abierta que en `PERIFERICO_7SEG.md` y `PERIFERICO_BUZZER.md`.
+El marcador de ganadas solo vuelve a cero con `rst_i`.
 
 ### Latches
 
@@ -178,8 +180,8 @@ quedar en `src/fpga/basys3.xdc`.
 - `botones_i[2]`, `BTN_IZQ`, a W19, `btnL`.
 - `botones_i[3]`, `BTN_DER`, a T17, `btnR`.
 - `botones_i[4]`, `BTN_SEL`, a N17, pin JC3 del Pmod JC, igual que en el Proyecto 2.
-- `botones_i[5]`, `BTN_OK`, a P18, pin JC4 del Pmod JC, igual que en el Proyecto 2.
-- `botones_i[6]`, `BTN_RST`, a U18, `btnC`.
+- `botones_i[5]`, `BTN_OK`, a U18, `btnC`.
+- `botones_i[6]`, `BTN_RST`, a P18, pin JC4 del Pmod JC, el botón rojo.
 - Todos con `IOSTANDARD LVCMOS33`.
 
 Conexiones en el top.
