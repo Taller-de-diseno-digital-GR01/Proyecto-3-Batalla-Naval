@@ -8,8 +8,8 @@ PERIFERICO_LED, módulo `periferico_led` en `src/design/periferico_led.sv`.
 
 ```mermaid
 flowchart LR
-    IN_WE(["write_enable_i<br/>(AND_WE)"]) --> PL["PERIFERICO_LED<br/>0x0001_0138 a 0x0001_013F"]
-    IN_ADDR(["addr_i[1:0]<br/>({1'b0, DataAddress_o[2]})"]) --> PL
+    IN_WE(["write_enable_i<br/>(led_we)"]) --> PL["PERIFERICO_LED<br/>0x0001_0138"]
+    IN_ADDR(["addr_i[1:0]<br/>(2'b00 fijo)"]) --> PL
     IN_WD(["wdata_i[31:0]<br/>(DataOut_o)"]) --> PL
     PL --> OUT_RD(["rdata_o[31:0]<br/>(MUX_LECTURA)"])
     PL --> OUT_LED(["leds_o[2:0]<br/>(LD0 a LD2)"])
@@ -28,9 +28,10 @@ cambia de fase. El hardware solo guarda lo escrito y lo saca a los pines.
 ## d) Entradas
 
 - `clk_i`, `rst_i`.
-- `write_enable_i`, habilitación de escritura, desde `AND_WE` del bus de datos (`we_o` del CPU en AND con
-  `sel_led`).
-- `addr_i[1:0]`, dirección del registro. No sale directo de `DataAddress_o[3:2]`, ver el inciso f).
+- `write_enable_i`, habilitación de escritura, desde `led_we` del controlador de mapeo (`we_o` del CPU en AND
+  con `sel_led`).
+- `addr_i[1:0]`, dirección del registro, fija en `2'b00` en el top. No sale de `DataAddress_o[3:2]`, ver el
+  inciso f).
 - `wdata_i[WIDTH-1:0]`, dato a escribir, desde `DataOut_o` del CPU.
 
 El módulo tiene el parámetro `WIDTH = 32`.
@@ -45,15 +46,15 @@ El módulo tiene el parámetro `WIDTH = 32`.
 
 Habla con un solo maestro, el CPU, a través de `BUS_DATOS`. No instancia ningún submódulo.
 
-La decodificación de dirección tiene la misma trampa que `PERIFERICO_7SEG`, vista desde el otro lado. Los
-displays están en `0x0001_0130` y el LED en `0x0001_0138`, dentro del mismo bloque de 16 bytes. `sel_led` sale
-de comparar `DataAddress_o[31:3]` contra `0x0001_0138 >> 3`, y el periférico queda en `0x0001_0138` a
-`0x0001_013F`.
+La dirección la decodifica el Address Translator del controlador de mapeo, detallado en
+`Address_Translator.md`. `sel_led` sale de comparar la dirección completa contra `0x0001_0138`, así que los
+displays en `0x0001_0130` no se cruzan con el LED aunque los dos caigan en el mismo bloque de 16 bytes.
 
-Con eso `DataAddress_o[3]` vale 1 en todo el rango del LED. Si `addr_i` fuera `DataAddress_o[3:2]` como en
-los demás periféricos, el registro de offset `0x00` llegaría con `addr_i = 2'b10`. En el top `addr_i` se
-arma como `{1'b0, DataAddress_o[2]}`, y así `0x0001_0138` llega como `2'b00`, que es el offset que da la
-tabla del enunciado. El periférico sigue la interfaz estándar sin saber en qué bloque está.
+Lo que sí hay que cuidar es `addr_i`. En `0x0001_0138` los bits `DataAddress_o[3:2]` valen `2'b10`, así que
+si se conectara como en la UART el registro de offset `0x00` llegaría con `addr_i = 2'b10`. Como el AT solo
+selecciona esa palabra, en el top `addr_i` va fijo en `2'b00`, que es el offset que da la tabla del
+enunciado. Es la adaptación de dirección que `Address_Translator.md` deja a las conexiones de fuera del AT, y
+el periférico sigue la interfaz estándar sin saber en qué dirección está.
 
 Hacia afuera los pines van a los tres primeros LEDs de la Basys 3.
 
@@ -81,9 +82,9 @@ La tabla de la sección 4.4.3 del enunciado fija un registro de datos en `0x0001
   - `[1]`, LD1, fase de batalla.
   - `[2]`, LD2, resultado final.
   - `[31:3]`, reservados, se leen en cero y las escrituras sobre ellos se ignoran.
-- `2'b01` (`0x0001_013C`), sin asignar. Las lecturas devuelven ceros y las escrituras no tienen efecto.
-
-`2'b10` y `2'b11` no llegan nunca, porque el top fija `addr_i[1]` en cero.
+`0x0001_013C` no es de este periférico. El AT la trata como dirección sin destino, así que ninguna escritura
+la habilita y una lectura devuelve cero desde `MUX_LECTURA`. Con `addr_i` fijo, `2'b01` a `2'b11` no llegan
+nunca, y el `case` de lectura igual los cubre con cero.
 
 ### Qué cambió respecto al Proyecto 2
 
@@ -165,11 +166,11 @@ Conexiones en el top.
 
 - `clk_i`, al reloj global de 100 MHz, pin W5.
 - `rst_i`, al reinicio general del sistema.
-- `write_enable_i`, a la salida de `AND_WE`, en alto solo cuando `we_o` está en alto y `DataAddress_o` cae
-  entre `0x0001_0138` y `0x0001_013F`.
-- `addr_i[1:0]`, a `{1'b0, DataAddress_o[2]}`.
+- `write_enable_i`, a `led_we` del controlador de mapeo, en alto solo cuando `we_o` está en alto y
+  `DataAddress_o` es `0x0001_0138`.
+- `addr_i[1:0]`, a `2'b00`.
 - `wdata_i[31:0]`, a `DataOut_o`.
-- `rdata_o[31:0]`, a `MUX_LECTURA`, que alimenta `DataIn_i` del CPU.
+- `rdata_o[31:0]`, a `MUX_LECTURA`, que alimenta `DataIn_i` del CPU. En `Address_Translator.md` es la entrada `led_dout`, que el AT elige con `mux_sel = 100`.
 - `leds_o`, al puerto `led[2:0]` del top.
 
 Igual que en los demás módulos, el diagrama por chips que pide el método no aplica a un diseño que se
