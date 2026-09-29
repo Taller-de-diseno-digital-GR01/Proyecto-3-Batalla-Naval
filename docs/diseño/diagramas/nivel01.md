@@ -49,14 +49,14 @@ flowchart LR
 ### Entradas
 
 - `clk`, reloj de 100 MHz de la Basys 3, pin W5. Es el único reloj que entra al sistema.
-- `rst`, reinicio general del hardware. Pone en cero las partidas ganadas. TODO: Revisar de dónde sale, el enunciado habla de un "reinicio general del sistema" que borra los contadores de ganadas y no dice qué lo dispara.
+- `rst`, reinicio general del hardware. Es lo único que pone en cero las partidas ganadas. TODO: Revisar de qué pin sale.
 - `BTN_ARRIBA`, `BTN_ABAJO`, `BTN_IZQ`, `BTN_DER`, navegación del cursor del Jugador 1, en `btnU`, `btnD`, `btnL` y `btnR` de la Basys 3.
 - `BTN_SEL`, rota la orientación del barco que se está colocando, en JC3 del Pmod JC.
-- `BTN_OK`, confirma una colocación o un disparo, en JC4 del Pmod JC.
-- `BTN_RST`, en `btnC`. Reinicia la partida y conserva los contadores de ganadas. Lo lee el programa, no reinicia el hardware.
+- `BTN_OK`, confirma una colocación o un disparo, en `btnC`.
+- `BTN_RST`, el botón rojo, en JC4 del Pmod JC. Reinicia la partida y conserva los contadores de ganadas. Lo lee el programa, no reinicia el hardware.
 - `rx`, línea serial que llega desde la aplicación de PC por el puente USB-UART, pin B18. Trae las colocaciones y los disparos del Jugador 2.
 
-La Basys 3 trae cinco botones y el enunciado pide siete, por eso `BTN_SEL` y `BTN_OK` van en el Pmod JC, igual que en el Proyecto 2.
+La Basys 3 trae cinco botones y el enunciado pide siete, por eso `BTN_SEL` y `BTN_RST` van en el Pmod JC, igual que en el Proyecto 2.
 
 ### Salidas
 
