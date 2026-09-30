@@ -110,21 +110,21 @@ salidas en todas las ramas. `CONT_REFRESCO` es el único `always_ff`.
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    CNT["CONT_REFRESCO<br/>contador libre, 18 bits"] -->|"selector = contador[17:16]"| SEL["SELECTOR_DIGITO<br/>mux 4 a 1 de nibbles y puntos"]
-    DIG(["i_digitos[15:0]"]) --> SEL
-    PTO(["i_puntos[3:0]"]) --> SEL
-    SEL -->|"digito_bcd[3:0]"| DEC["DECOD_BCD_7SEG<br/>tabla BCD a gfedcba"]
-    DEC --> SEG(["o_seg[6:0]"])
-    SEL --> AN(["o_an[3:0]"])
-    SEL -->|punto| NOT["NOT"]
-    NOT --> DP(["o_dp"])
-```
+![Esquemático por compuertas de MARCADOR](../diagramas/marcador.png)
 
-`clk` y `rst` entran solo a `CONT_REFRESCO`.
+El esquemático sale de sintetizar el `.sv` con yosys, bajarlo a AND, OR, XOR, NOT, MUX y flip-flops D
+con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima el nombre de la señal que
+produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
+para el reset y los `if` de cada registro.
 
-TODO: Revisar y reemplazar por el esquemático por compuertas generado desde `marcador.sv` cuando exista, igual que en `generador_tono.md`.
+Arriba está el módulo con un bloque por `always` del `.sv`, `CONT_REFRESCO` de las líneas 18 a 23,
+`SELECTOR_DIGITO` de 25 a 50 junto con la NOT de `o_dp`, y `DECOD_BCD_7SEG` de 52 a 66. Abajo está
+cada uno abierto a compuertas.
+
+Se genera con `REFRESH_BITS = 4`. Con 18 el contador repite la misma celda de suma por bit y
+`selector` sigue saliendo de los dos bits de arriba. Para este módulo yosys corre con `proc -norom`,
+porque si no convierte el `case` de `DECOD_BCD_7SEG` en una ROM y el dibujo muestra una memoria en vez
+de compuertas.
 
 ## j) Diagrama completo de conexiones del diseño
 
