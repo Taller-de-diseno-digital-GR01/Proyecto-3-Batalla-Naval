@@ -155,18 +155,20 @@ El marcador de ganadas solo vuelve a cero con `rst_i`.
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    BTN(["botones_i[6:0]"]) --> REG["REG_ESTADO<br/>registro 7b"]
-    REG -->|"estado[6:0]"| MUX_RD{{"MUX_RD<br/>addr_i == 00"}}
-    ADDR(["addr_i[1:0]"]) --> MUX_RD
-    MUX_RD --> OUT_RD(["rdata_o[31:0]"])
-```
+![Esquemático por compuertas de PERIFERICO_ENTRADAS](../diagramas/periferico_entradas.png)
 
-`clk_i` y `rst_i` entran a `REG_ESTADO` aunque no se dibujen. `write_enable_i` y `wdata_i` no se conectan a
-nada.
+El esquemático sale de sintetizar el `.sv` con yosys, bajarlo a AND, OR, XOR, NOT, MUX y flip-flops D
+con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima el nombre de la señal que
+produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
+para el reset y los `if` de cada registro.
 
-TODO: Revisar y reemplazar por el esquemático por compuertas generado desde `periferico_entradas.sv` cuando exista, igual que en `PERIFERICO_UART.md`.
+Arriba está el periférico con sus dos bloques como cajas, `REG_ESTADO` de las líneas 19 a 22 del `.sv`
+y `MUX_RD` de 24 a 29, y abajo está cada uno abierto a compuertas. `REG_ESTADO` son los siete
+flip-flops con la AND del reset delante. `MUX_RD` deja pasar `estado` solo cuando `addr_i` vale `00`.
+
+Se genera con el bus de 8 bits en vez de 32. Los siete botones caben igual, y los bits de más arriba
+solo serían ceros constantes en `rdata_o`. `write_enable_i` y `wdata_i` quedan sueltos porque el
+periférico no los usa.
 
 ## j) Diagrama completo de conexiones del diseño
 
