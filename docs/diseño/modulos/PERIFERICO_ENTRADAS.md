@@ -162,8 +162,8 @@ con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima e
 produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
 para el reset y los `if` de cada registro.
 
-Arriba está el periférico con sus dos bloques como cajas, `REG_ESTADO` de las líneas 19 a 22 del `.sv`
-y `MUX_RD` de 24 a 29, y abajo está cada uno abierto a compuertas. `REG_ESTADO` son los siete
+Arriba está el periférico con sus dos bloques como cajas, `REG_ESTADO` de las líneas 18 a 21 del `.sv`
+y `MUX_RD` de 23 a 28, y abajo está cada uno abierto a compuertas. `REG_ESTADO` son los siete
 flip-flops con la AND del reset delante. `MUX_RD` deja pasar `estado` solo cuando `addr_i` vale `00`.
 
 Se genera con el bus de 8 bits en vez de 32. Los siete botones caben igual, y los bits de más arriba
