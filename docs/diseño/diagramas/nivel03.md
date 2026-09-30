@@ -203,6 +203,154 @@ Sobremuestreo a 16 veces el baudaje con un divisor de 54 ciclos, una máquina de
 
 El diseño del Proyecto 3 tiene **un único maestro del periférico, el procesador**, así que el árbitro, el receptor y el transmisor del Proyecto 2 no existen acá, su trabajo lo hace la ROM. El periférico todavía no aparece instanciado en un `top.sv` del sistema completo.
 
+## PERIFERICO_ENTRADAS
+
+El bloque sigue [`periferico_entradas.sv`](../../../src/design/periferico_entradas.sv). La ficha completa, con los puntos a) a j), está en [`PERIFERICO_ENTRADAS.md`](../modulos/PERIFERICO_ENTRADAS.md).
+
+- **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Los pines son `botones_i[6:0]`, los cinco botones de la Basys 3 y `BTN_SEL` y `BTN_RST` en N17 y P18 del Pmod JC.
+- **Selección.** El Address Translator pone `mux_sel` en `010` solo con `0x0001_0120`. El registro es de solo lectura, así que `gpio_we` queda fijo en cero, y `write_enable_i` y `wdata_i` llegan al periférico solo porque son parte de la interfaz estándar. `addr_i` va fijo en `2'b00`.
+
+No hay `DECOD_DIR` porque no hay nada que escribir, y tampoco antirrebote. Según el profesor los botones de la tarjeta ya llegan filtrados, y los dos del Pmod JC tampoco rebotan. Los flancos los saca el programa con `actual & ~botones_prev`.
+
+### REG_ESTADO
+
+Copia los siete pines en cada flanco del reloj.
+
+- Entradas, `botones_i[6:0]`.
+- Salidas, `estado[6:0]` hacia `MUX_RD`.
+
+Registro de 7 bits con reset síncrono y sin habilitación. Está para que el pin, que es asíncrono, termine en un flip-flop y no llegue combinacional hasta `DataIn_i`. `BTN_RST` es el bit 6 y no llega a `rst_i`, si llegara el registro estaría en reset mientras el botón está apretado y el programa nunca vería la presión.
+
+### MUX_RD
+
+Pone el estado de los botones en `rdata_o`.
+
+- Entradas, `addr_i[1:0]` y `estado[6:0]`.
+- Salidas, `rdata_o[31:0]` hacia `MUX_LECTURA`, en la entrada `gpio_dout` del AT.
+
+Con `addr_i = 2'b00` devuelve `estado` rellenado con ceros a 32 bits, y cero en cualquier otra dirección.
+
+## PERIFERICO_7SEG
+
+El bloque sigue [`periferico_7seg.sv`](../../../src/design/periferico_7seg.sv) y su submódulo [`marcador.sv`](../../../src/design/marcador.sv). La ficha completa está en [`PERIFERICO_7SEG.md`](../modulos/PERIFERICO_7SEG.md) y la del submódulo en [`marcador.md`](../modulos/marcador.md).
+
+- **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Hacia el display salen `seg_o[6:0]`, `an_o[3:0]` y `dp_o`, todos activos en bajo.
+- **Selección.** El Address Translator activa `display_we = we_o && sel_7seg` solo con `0x0001_0130` y pone `mux_sel` en `011` para leerlo. `addr_i` va fijo en `2'b00`.
+
+El programa lleva las partidas ganadas en BCD y escribe los cuatro dígitos de una vez, el Jugador 1 en `AN3` y `AN2` y el Jugador 2 en `AN1` y `AN0`. Con 3 ganadas del Jugador 1 y 12 del Jugador 2 escribe `0x0000_0312`.
+
+### DECOD_DIR
+
+- Entradas, `write_enable_i` y `addr_i[1:0]`.
+- Salidas, `escribir_digitos` hacia `REG_DIGITOS`.
+
+Es `write_enable_i && addr_i == 2'b00`.
+
+### REG_DIGITOS
+
+Guarda los cuatro dígitos y los cuatro puntos decimales.
+
+- Entradas, `wdata_i[19:0]` y `escribir_digitos`.
+- Salidas, `reg_digitos[15:0]` como `i_digitos` y `reg_digitos[19:16]` como `i_puntos` hacia `MARCADOR`, y `reg_digitos` completo hacia `MUX_RD`.
+
+Registro de 20 bits con reset síncrono. Solo `rst_i` lo pone en cero, así que las ganadas sobreviven a `BTN_RST`, que lo atiende el programa sin tocar este registro. Los puntos quedan libres para marcar el turno si el programa quiere.
+
+### MUX_RD
+
+- Entradas, `addr_i[1:0]` y `reg_digitos`.
+- Salidas, `rdata_o[31:0]` hacia `MUX_LECTURA`, en la entrada `display_dout` del AT.
+
+Devuelve `reg_digitos` con ceros arriba en `2'b00` y cero en lo demás. Con la lectura el programa puede cambiar los dígitos de un solo jugador sin llevar una copia aparte.
+
+### MARCADOR
+
+Hace el barrido de los cuatro dígitos.
+
+- Entradas, `i_digitos[15:0]` e `i_puntos[3:0]`.
+- Salidas, `o_seg[6:0]`, `o_an[3:0]` y `o_dp`, que salen del periférico como `seg_o`, `an_o` y `dp_o`.
+
+Un contador libre de 18 bits elige con sus dos bits de arriba el dígito activo, cada uno por 655 µs, y un decodificador pasa el nibble a segmentos. Un nibble de 10 a 15 apaga el dígito. Es el `marcador` del Proyecto 2 sin la división entre 10, porque los dígitos ya llegan en BCD.
+
+## PERIFERICO_LED
+
+El bloque sigue [`periferico_led.sv`](../../../src/design/periferico_led.sv). La ficha completa está en [`PERIFERICO_LED.md`](../modulos/PERIFERICO_LED.md).
+
+- **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Hacia la tarjeta sale `leds_o[2:0]`, a LD0 (U16), LD1 (E19) y LD2 (U19).
+- **Selección.** El Address Translator activa `led_we = we_o && sel_led` solo con `0x0001_0138` y pone `mux_sel` en `100` para leerlo. `addr_i` va fijo en `2'b00`, porque en esa dirección `DataAddress_o[3:2]` vale `2'b10`.
+
+### DECOD_DIR
+
+- Entradas, `write_enable_i` y `addr_i[1:0]`.
+- Salidas, `escribir_leds` hacia `REG_LEDS`.
+
+Es `write_enable_i && addr_i == 2'b00`.
+
+### REG_LEDS
+
+Guarda qué LED está encendido.
+
+- Entradas, `wdata_i[2:0]` y `escribir_leds`.
+- Salidas, `reg_leds[2:0]`, directo a `leds_o` y hacia `MUX_RD`.
+
+Registro de 3 bits con reset síncrono. El programa escribe `0x1` en colocación, `0x2` en batalla y `0x4` en resultado, así cada fase tiene su propio LED y se distingue sin tabla. No hay decodificador, el programa escribe el patrón directo.
+
+### MUX_RD
+
+- Entradas, `addr_i[1:0]` y `reg_leds`.
+- Salidas, `rdata_o[31:0]` hacia `MUX_LECTURA`, en la entrada `led_dout` del AT.
+
+Devuelve `reg_leds` con ceros arriba en `2'b00` y cero en lo demás.
+
+## PERIFERICO_BUZZER
+
+El bloque sigue [`periferico_buzzer.sv`](../../../src/design/periferico_buzzer.sv) y sus dos submódulos [`secuenciador_melodia.sv`](../../../src/design/secuenciador_melodia.sv) y [`generador_tono.sv`](../../../src/design/generador_tono.sv). La ficha completa está en [`PERIFERICO_BUZZER.md`](../modulos/PERIFERICO_BUZZER.md), y la de los submódulos en [`secuenciador_melodia.md`](../modulos/secuenciador_melodia.md) y [`generador_tono.md`](../modulos/generador_tono.md).
+
+- **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Hacia el buzzer sale `buzzer_o`, en M18 (JC2).
+- **Selección.** El Address Translator activa `buzzer_we = we_o && sel_buzzer` solo con `0x0001_0140` y pone `mux_sel` en `101` para leerlo. `addr_i` va fijo en `2'b00`.
+
+Las cinco melodías que pide el enunciado viven en el periférico. El programa escribe un código y sigue con el lazo, sin esperar a que termine de sonar.
+
+### DECOD_DIR
+
+- Entradas, `write_enable_i` y `addr_i[1:0]`.
+- Salidas, `escribir_sonido` hacia `REG_SONIDO` y como `i_iniciar` hacia `SECUENCIADOR_MELODIA`.
+
+Es `write_enable_i && addr_i == 2'b00`. El mismo pulso carga el código y reinicia el secuenciador, así una escritura nueva corta la melodía que venga sonando.
+
+### REG_SONIDO
+
+Guarda el código de la melodía que está sonando.
+
+- Entradas, `wdata_i[2:0]`, `escribir_sonido` y `o_fin` de `SECUENCIADOR_MELODIA`.
+- Salidas, `reg_sonido[2:0]` como `i_sonido` hacia `SECUENCIADOR_MELODIA` y hacia `MUX_RD`.
+
+Registro de 3 bits con reset síncrono. Los códigos son `000` silencio, `001` impacto, `010` fallo, `011` hundido, `100` colocación inválida y `101` victoria. Vuelve solo a `000` con `o_fin`, y la escritura le gana a `o_fin` porque en reposo `o_fin` está siempre en alto.
+
+### MUX_RD
+
+- Entradas, `addr_i[1:0]` y `reg_sonido`.
+- Salidas, `rdata_o[31:0]` hacia `MUX_LECTURA`, en la entrada `buzzer_dout` del AT.
+
+Devuelve `reg_sonido` con ceros arriba en `2'b00` y cero en lo demás. Leer cero quiere decir que el buzzer ya se calló.
+
+### SECUENCIADOR_MELODIA
+
+Recorre la melodía nota por nota.
+
+- Entradas, `i_iniciar` e `i_sonido[2:0]`.
+- Salidas, `o_n[17:0]` y `o_sonar` hacia `GENERADOR_TONO`, y `o_fin` hacia `REG_SONIDO`.
+
+`ROM_MELODIAS` guarda hasta ocho pasos por código, cada uno con una nota y una duración en unidades de 50 ms, y `ROM_NOTAS` pasa la nota al medio periodo del divisor. Tres contadores miden los 50 ms, las unidades de la nota y el paso. Un paso con duración cero es el fin de la melodía.
+
+### GENERADOR_TONO
+
+Saca la onda cuadrada.
+
+- Entradas, `i_n[17:0]` e `i_sonar`.
+- Salidas, `o_sound`, que sale del periférico como `buzzer_o`.
+
+Un contador de 18 bits vuelve a cero cuando llega a `i_n` y en ese momento invierte la onda. Compara con `>=`, porque la nota cambia sin pasar por silencio y el contador puede quedar arriba del N nuevo. Es el divisor del `generador_tono` del Proyecto 2, sin la parte que decidía qué sonaba.
+
 ## VGA
 Este bloque corresponde al módulo que conecta al procesador (CPU) con el monitor mediante el estándar de video VGA. La ficha completa, con los puntos a) a j), está en [`modulos/PERIFERICO_VGA.md`](../modulos/PERIFERICO_VGA.md).
 
