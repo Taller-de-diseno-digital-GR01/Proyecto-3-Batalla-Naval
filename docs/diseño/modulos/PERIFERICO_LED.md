@@ -139,8 +139,8 @@ con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima e
 produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
 para el reset y los `if` de cada registro.
 
-Arriba está el periférico con sus tres bloques como cajas, `DECOD_DIR` de la línea 19 del `.sv`,
-`REG_LEDS` de 22 a 25 y `MUX_RD` de 29 a 34, y abajo está cada uno abierto a compuertas. `leds_o`
+Arriba está el periférico con sus tres bloques como cajas, `DECOD_DIR` de la línea 18 del `.sv`,
+`REG_LEDS` de 21 a 24 y `MUX_RD` de 28 a 33, y abajo está cada uno abierto a compuertas. `leds_o`
 sale directo de `reg_leds`, sin pasar por ningún bloque.
 
 Se genera con el bus de 4 bits en vez de 32. Los tres bits del registro no cambian, lo que se ahorra
