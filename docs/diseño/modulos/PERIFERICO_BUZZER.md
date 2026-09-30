@@ -138,7 +138,7 @@ produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son l
 para el reset y los `if` de cada registro.
 
 Arriba está el periférico con los dos submódulos y los tres bloques del nivel 3 como cajas. Cada
-bloque sale del `.sv`, `DECOD_DIR` de la línea 22, `REG_SONIDO` de 43 a 47 y `MUX_RD` de 49 a 54, y
+bloque sale del `.sv`, `DECOD_DIR` de la línea 21, `REG_SONIDO` de 42 a 46 y `MUX_RD` de 48 a 53, y
 abajo está cada uno abierto a compuertas. `secuenciador_melodia` y `generador_tono` se abren en sus
 propios docs.
 

@@ -1,4 +1,3 @@
-// Port del generador_tono del P2, lo que decidia que sonar y cuanto tiempo paso a secuenciador_melodia
 module generador_tono #(parameter ANCHO_N = 18) ( // 18 bits alcanzan para A3, la nota mas grave de ROM_NOTAS
   input logic clk,
   input logic rst,

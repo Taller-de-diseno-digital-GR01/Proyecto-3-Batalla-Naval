@@ -13,9 +13,9 @@ endmodule
 (* blackbox *) module generador_tono #(parameter ANCHO_N = 18) (input logic clk, rst, input logic [3:0] i_n, input logic i_sonar, output logic o_sound);
 endmodule
 V
-EXTRA=cajas.sv bash "$D/sintetizar.sh" periferico_buzzer periferico_buzzer.sv "-set WIDTH 4" "" DECOD_DIR:22-22 REG_SONIDO:43-47 MUX_RD:49-54
+EXTRA=cajas.sv bash "$D/sintetizar.sh" periferico_buzzer periferico_buzzer.sv "-set WIDTH 4" "" DECOD_DIR:21-21 REG_SONIDO:42-46 MUX_RD:48-53
 bash sintetizar_norom.sh secuenciador_melodia secuenciador_melodia.sv "-set CLK_FREQ_HZ 4000 -set UNIDAD_MS 1" CONTADORES ROM_MELODIAS:56-91 ROM_NOTAS:93-107 FIN_NOTA:109-110 CONTADORES:113-133 SALIDAS:135-136
-bash "$D/sintetizar.sh" generador_tono generador_tono.sv "-set ANCHO_N 3" "" REG_ONDA:32-36
+bash "$D/sintetizar.sh" generador_tono generador_tono.sv "-set ANCHO_N 3" "" REG_ONDA:31-35
 # u_cont y u_cmp ya son módulos en el .sv, se renombran para que componer.sh los abra debajo del top
 python3 - generador_tono.all.json <<'P'
 import json, re, sys

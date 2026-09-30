@@ -115,7 +115,7 @@ puede leer. Con más bits el contador y el comparador repiten la misma celda por
 fuera de ellos no cambia.
 
 Arriba está el módulo con `u_cont` (`contador_limpiable`), `u_cmp` (`comparador_mayor_igual`) y
-`REG_ONDA`, el `always_ff` de las líneas 32 a 36 del `.sv`, como cajas. Abajo está cada uno abierto a
+`REG_ONDA`, el `always_ff` de las líneas 31 a 35 del `.sv`, como cajas. Abajo está cada uno abierto a
 compuertas.
 Cada compuerta o flip-flop lleva encima el nombre de la señal que produce cuando esa señal tiene
 nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma para el reset y el `if` de
