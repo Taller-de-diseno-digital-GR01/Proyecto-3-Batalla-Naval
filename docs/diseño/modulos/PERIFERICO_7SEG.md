@@ -131,28 +131,20 @@ El registro va en un `always_ff` con reset síncrono. La lectura es un `always_c
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    ADDR(["addr_i[1:0]"]) --> DEC["DECOD_DIR<br/>addr_i == 00"]
-    WE(["write_enable_i"]) --> DEC
+![Esquemático por compuertas de PERIFERICO_7SEG](../diagramas/periferico_7seg.png)
 
-    WDATA(["wdata_i[19:0]"]) --> REG["REG_DIGITOS<br/>registro 20b"]
-    DEC -->|escribir_digitos| REG
+El esquemático sale de sintetizar el `.sv` con yosys, bajarlo a AND, OR, XOR, NOT, MUX y flip-flops D
+con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima el nombre de la señal que
+produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
+para el reset y los `if` de cada registro.
 
-    REG -->|"reg_digitos[15:0] como i_digitos"| MARC["MARCADOR<br/>barrido de 4 dígitos"]
-    REG -->|"reg_digitos[19:16] como i_puntos"| MARC
-    MARC --> SEG(["seg_o[6:0]"])
-    MARC --> AN(["an_o[3:0]"])
-    MARC --> DP(["dp_o"])
+Arriba está el periférico con `marcador` y los tres bloques del nivel 3 como cajas. Cada bloque sale
+del `.sv`, `DECOD_DIR` de la línea 32, `REG_DIGITOS` de 35 a 38 y `MUX_RD` de 40 a 45, y abajo está
+cada uno abierto a compuertas. `marcador` se abre en su propio doc.
 
-    REG --> MUX_RD{{"MUX de lectura"}}
-    ADDR --> MUX_RD
-    MUX_RD --> OUT_RD(["rdata_o[31:0]"])
-```
-
-`clk_i` y `rst_i` entran al registro y a `marcador` aunque no se dibujen.
-
-TODO: Revisar y reemplazar por el esquemático por compuertas generado desde `periferico_7seg.sv` cuando exista, igual que en `PERIFERICO_UART.md`.
+Se genera con el registro de 6 bits y el bus de 8 en vez de 20 y 32, un nibble de dígito y dos puntos.
+Con los 20 bits el registro solo ya ocupa varias páginas. Cada bit repite el mismo flip-flop con su
+MUX de carga, así que con el ancho real cambia la cantidad de copias y no la estructura.
 
 ## j) Diagrama completo de conexiones del diseño
 
