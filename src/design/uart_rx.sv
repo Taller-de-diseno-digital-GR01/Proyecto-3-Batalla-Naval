@@ -1,4 +1,3 @@
-// Port a SystemVerilog de UART/src/UART_rx.vhd, misma fsm y mismos tiempos, nombres traducidos al estilo del repo
 module uart_rx #(parameter TICKS_X16 = 54) ( // (100e6 / 115200) / 16 = 54.25, el generico original venia en 9 para 16 MHz
   input logic clk,
   input logic rst,

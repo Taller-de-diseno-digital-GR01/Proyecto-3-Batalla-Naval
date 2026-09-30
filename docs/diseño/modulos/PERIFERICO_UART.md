@@ -217,8 +217,8 @@ produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son l
 para el reset y los `if` de cada registro.
 
 Arriba está el periférico con los dos núcleos y los cuatro bloques del nivel 3 como cajas. Cada bloque
-sale de un `always` del `.sv`, `REG_DATOS_TX` de las líneas 50 a 53, `REG_DATOS_RX` de 55 a 59,
-`REG_CONTROL` de 61 a 72 y `MUX_RD` de 74 a 81, y abajo está cada uno abierto a compuertas. Los núcleos
+sale de un `always` del `.sv`, `REG_DATOS_TX` de las líneas 49 a 52, `REG_DATOS_RX` de 54 a 58,
+`REG_CONTROL` de 60 a 71 y `MUX_RD` de 73 a 80, y abajo está cada uno abierto a compuertas. Los núcleos
 se abren en sus propios docs.
 
 Se genera con el dato de 2 bits y el bus de 4 en vez de 8 y 32, porque con los anchos reales el mux de
