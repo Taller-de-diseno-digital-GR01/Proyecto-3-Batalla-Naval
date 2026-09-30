@@ -11,7 +11,7 @@ cat > cajas.sv <<'V'
 endmodule
 V
 # el contador de refresco se dibuja de 4 bits
-EXTRA=cajas.sv bash "$D/sintetizar.sh" periferico_7seg periferico_7seg.sv "-set WIDTH 8" "" DECOD_DIR:32-32 REG_DIGITOS:35-38 MUX_RD:40-45
-bash sintetizar_norom.sh marcador marcador.sv "-set REFRESH_BITS 4" "" CONT_REFRESCO:18-23 SELECTOR_DIGITO:25-50 DECOD_BCD_7SEG:52-66
+EXTRA=cajas.sv bash "$D/sintetizar.sh" periferico_7seg periferico_7seg.sv "-set WIDTH 8" "" DECOD_DIR:31-31 REG_DIGITOS:34-37 MUX_RD:39-44
+bash sintetizar_norom.sh marcador marcador.sv "-set REFRESH_BITS 4" "" CONT_REFRESCO:17-22 SELECTOR_DIGITO:24-49 DECOD_BCD_7SEG:51-65
 for t in periferico_7seg marcador; do bash "$D/componer.sh" $t.all.json $t "$R/docs/diseño/diagramas/$t.png"; done
 rm -rf $T

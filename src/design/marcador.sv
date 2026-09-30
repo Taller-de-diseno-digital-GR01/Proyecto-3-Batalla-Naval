@@ -1,4 +1,3 @@
-// Port del marcador del P2, los cuatro digitos llegan en BCD y el modulo no sabe que representan
 module marcador #(parameter REFRESH_BITS = 18) (
   input logic clk,
   input logic rst,

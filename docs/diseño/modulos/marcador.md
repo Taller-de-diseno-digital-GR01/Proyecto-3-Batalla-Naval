@@ -117,8 +117,8 @@ con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima e
 produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
 para el reset y los `if` de cada registro.
 
-Arriba está el módulo con un bloque por `always` del `.sv`, `CONT_REFRESCO` de las líneas 18 a 23,
-`SELECTOR_DIGITO` de 25 a 50 junto con la NOT de `o_dp`, y `DECOD_BCD_7SEG` de 52 a 66. Abajo está
+Arriba está el módulo con un bloque por `always` del `.sv`, `CONT_REFRESCO` de las líneas 17 a 22,
+`SELECTOR_DIGITO` de 24 a 49 junto con la NOT de `o_dp`, y `DECOD_BCD_7SEG` de 51 a 65. Abajo está
 cada uno abierto a compuertas.
 
 Se genera con `REFRESH_BITS = 4`. Con 18 el contador repite la misma celda de suma por bit y

@@ -139,7 +139,7 @@ produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son l
 para el reset y los `if` de cada registro.
 
 Arriba está el periférico con `marcador` y los tres bloques del nivel 3 como cajas. Cada bloque sale
-del `.sv`, `DECOD_DIR` de la línea 32, `REG_DIGITOS` de 35 a 38 y `MUX_RD` de 40 a 45, y abajo está
+del `.sv`, `DECOD_DIR` de la línea 31, `REG_DIGITOS` de 34 a 37 y `MUX_RD` de 39 a 44, y abajo está
 cada uno abierto a compuertas. `marcador` se abre en su propio doc.
 
 Se genera con el registro de 6 bits y el bus de 8 en vez de 20 y 32, un nibble de dígito y dos puntos.

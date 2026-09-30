@@ -1,4 +1,3 @@
-// Los puertos del bus llevan sufijo _i/_o porque la seccion 4.5.5 del enunciado los define asi, igual que en periferico_uart
 module periferico_7seg #(parameter WIDTH = 32, parameter REFRESH_BITS = 18) (
   input logic clk_i,
   input logic rst_i,
