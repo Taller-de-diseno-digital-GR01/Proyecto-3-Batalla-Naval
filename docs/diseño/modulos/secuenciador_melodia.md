@@ -206,35 +206,24 @@ asignan todas sus salidas en todas las ramas, que es lo que evita el latch.
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    INI(["i_iniciar"]) --> CC["CONTADOR<br/>cont_ciclos, 23 bits"]
-    INI --> CU["CONTADOR<br/>cont_unidades, 3 bits"]
-    INI --> CP["CONTADOR<br/>paso, 3 bits"]
+![Esquemático por compuertas de SECUENCIADOR_MELODIA](../diagramas/secuenciador_melodia.png)
 
-    CC -->|tick_unidad| CU
-    CU --> CMP_D["COMPARADOR<br/>cont_unidades == dur - 1"]
-    CC -->|tick_unidad| CMP_D
-    CMP_D -->|fin_nota| CP
-    CMP_D -->|fin_nota| CU
+El esquemático sale de sintetizar el `.sv` con yosys, bajarlo a AND, OR, XOR, NOT, MUX y flip-flops D
+con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima el nombre de la señal que
+produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
+para el reset y los `if` de cada registro.
 
-    SON(["i_sonido[2:0]"]) --> ROM_M["ROM_MELODIAS<br/>64 x 7 bits"]
-    CP -->|paso| ROM_M
-    ROM_M -->|"dur[2:0]"| CMP_D
-    ROM_M -->|"dur[2:0]"| CMP_F["COMPARADOR<br/>dur == 0"]
-    ROM_M -->|"nota[3:0]"| ROM_N["ROM_NOTAS<br/>16 x 18 bits"]
-    ROM_M -->|"nota[3:0]"| CMP_S["COMPARADOR<br/>nota == 0"]
+Arriba está el módulo con sus bloques como cajas, `ROM_MELODIAS` de las líneas 56 a 91 del `.sv`,
+`ROM_NOTAS` de 93 a 107, `FIN_NOTA` con `tick_unidad` y `fin_nota` de 109 a 110 y `SALIDAS` con
+`o_fin` y `o_sonar` de 135 a 136. El `always_ff` de los contadores está partido por registro,
+`CONTADORES_CONT_CICLOS`, `CONTADORES_CONT_UNIDADES` y `CONTADORES_PASO`, y lo que usan los tres queda
+en `CONTADORES_COMUN`. Abajo está cada bloque abierto a compuertas.
 
-    CMP_F -->|fin| CC
-    CMP_F -->|fin| CU
-    CMP_F -->|fin| AND["AND<br/>no fin y no silencio"]
-    CMP_S --> AND
-    CMP_F --> OUT_FIN(["o_fin"])
-    AND --> OUT_SON(["o_sonar"])
-    ROM_N --> OUT_N(["o_n[17:0]"])
-```
-
-`clk` y `rst` entran a los tres contadores aunque no se dibujen.
+Se genera con `CLK_FREQ_HZ = 4000`, `UNIDAD_MS = 1` y `o_n` de 4 bits. Con eso `cont_ciclos` queda de
+2 bits y los N de `ROM_NOTAS` caben en 4, así que las constantes de esa ROM en el dibujo no son las de
+la tabla del inciso h). `ROM_MELODIAS` sí es la real, no depende de ningún parámetro. Para este
+módulo yosys corre con `proc -norom`, porque si no convierte los dos `case` en ROMs y el dibujo
+muestra memorias en vez de compuertas.
 
 ## j) Diagrama completo de conexiones del diseño
 
