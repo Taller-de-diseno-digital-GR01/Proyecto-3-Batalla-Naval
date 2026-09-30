@@ -130,31 +130,20 @@ El registro va en un `always_ff` con reset síncrono. La lectura es un `always_c
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    ADDR(["addr_i[1:0]"]) --> DEC["DECOD_DIR<br/>addr_i == 00"]
-    WE(["write_enable_i"]) --> DEC
+![Esquemático por compuertas de PERIFERICO_BUZZER](../diagramas/periferico_buzzer.png)
 
-    WDATA(["wdata_i[2:0]"]) --> REG_S["REG_SONIDO<br/>registro 3b"]
-    DEC -->|escribir_sonido| REG_S
-    DEC -->|"escribir_sonido como i_iniciar"| SEQ["SECUENCIADOR_MELODIA<br/>ROM_MELODIAS + ROM_NOTAS"]
-    REG_S -->|i_sonido| SEQ
-    SEQ -->|o_fin| REG_S
+El esquemático sale de sintetizar el `.sv` con yosys, bajarlo a AND, OR, XOR, NOT, MUX y flip-flops D
+con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima el nombre de la señal que
+produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
+para el reset y los `if` de cada registro.
 
-    SEQ -->|"o_n[17:0]"| GEN["GENERADOR_TONO<br/>divisor, 18 bits"]
-    SEQ -->|o_sonar| GEN
-    GEN --> OUT_BUZ(["buzzer_o"])
+Arriba está el periférico con los dos submódulos y los tres bloques del nivel 3 como cajas. Cada
+bloque sale del `.sv`, `DECOD_DIR` de la línea 22, `REG_SONIDO` de 43 a 47 y `MUX_RD` de 49 a 54, y
+abajo está cada uno abierto a compuertas. `secuenciador_melodia` y `generador_tono` se abren en sus
+propios docs.
 
-    REG_S --> MUX_RD{{"MUX de lectura"}}
-    ADDR --> MUX_RD
-    MUX_RD --> OUT_RD(["rdata_o[31:0]"])
-```
-
-`clk_i` y `rst_i` entran al registro y a los dos submódulos aunque no se dibujen.
-
-El método pide este esquemático por compuertas. Acá se deja en registros, comparadores y un
-multiplexor, igual que en `PERIFERICO_UART.md`, porque cada bloque sale directo de una línea del `.sv`
-y yosys es el que lo baja a LUTs. Los dos submódulos se abren en sus propios docs.
+Se genera con el bus de 4 bits en vez de 32 y `n_nota` de 4 en vez de 18. `n_nota` solo pasa de una
+caja a la otra, y los bits de más de `rdata_o` serían ceros constantes.
 
 ## j) Diagrama completo de conexiones del diseño
 
