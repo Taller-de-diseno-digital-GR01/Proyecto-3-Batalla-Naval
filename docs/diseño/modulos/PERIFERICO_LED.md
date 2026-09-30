@@ -132,23 +132,19 @@ colocación, que es la fase en la que arranca la partida nueva.
 
 ## i) Diagrama esquemático detallado del diseño
 
-```mermaid
-flowchart LR
-    ADDR(["addr_i[1:0]"]) --> DEC["DECOD_DIR<br/>addr_i == 00"]
-    WE(["write_enable_i"]) --> DEC
+![Esquemático por compuertas de PERIFERICO_LED](../diagramas/periferico_led.png)
 
-    WDATA(["wdata_i[2:0]"]) --> REG["REG_LEDS<br/>registro 3b"]
-    DEC -->|escribir_leds| REG
+El esquemático sale de sintetizar el `.sv` con yosys, bajarlo a AND, OR, XOR, NOT, MUX y flip-flops D
+con `abc`, y dibujarlo con netlistsvg. Cada compuerta o flip-flop lleva encima el nombre de la señal que
+produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma
+para el reset y los `if` de cada registro.
 
-    REG --> LED(["leds_o[2:0]"])
-    REG --> MUX_RD{{"MUX_RD"}}
-    ADDR --> MUX_RD
-    MUX_RD --> OUT_RD(["rdata_o[31:0]"])
-```
+Arriba está el periférico con sus tres bloques como cajas, `DECOD_DIR` de la línea 19 del `.sv`,
+`REG_LEDS` de 22 a 25 y `MUX_RD` de 29 a 34, y abajo está cada uno abierto a compuertas. `leds_o`
+sale directo de `reg_leds`, sin pasar por ningún bloque.
 
-`clk_i` y `rst_i` entran a `REG_LEDS` aunque no se dibujen.
-
-TODO: Revisar y reemplazar por el esquemático por compuertas generado desde `periferico_led.sv` cuando exista, igual que en `PERIFERICO_UART.md`.
+Se genera con el bus de 4 bits en vez de 32. Los tres bits del registro no cambian, lo que se ahorra
+son los ceros constantes de `rdata_o` y las entradas sueltas de `wdata_i`.
 
 ## j) Diagrama completo de conexiones del diseño
 
