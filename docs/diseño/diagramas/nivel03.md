@@ -17,7 +17,9 @@ flowchart TD
     end
 
     subgraph GPIO["PERIFERICO_ENTRADAS"]
-        BTNREG["REG_ESTADO<br/>botones_i[6:0]"]
+        BTNREG["REG_ESTADO<br/>7 bits, botones_i[6:0]"]
+        MUX_BTN["MUX_RD<br/>rdata_o"]
+        BTNREG --> MUX_BTN
     end
 
     subgraph PUART["PERIFERICO_UART"]
@@ -45,16 +47,35 @@ flowchart TD
     MON["Monitor VGA"]
 
     subgraph P7["PERIFERICO_7SEG"]
-        DREG["REG_DIGITOS<br/>4 dígitos BCD y 4 puntos"] --> MARC["MARCADOR<br/>barrido de 4 dígitos"]
+        DEC_7["DECOD_DIR<br/>addr_i == 00"]
+        DREG["REG_DIGITOS<br/>4 dígitos BCD y 4 puntos"]
+        MUX_7["MUX_RD<br/>rdata_o"]
+        MARC["MARCADOR<br/>barrido de 4 dígitos"]
+        DEC_7 --> DREG
+        DREG --> MUX_7
+        DREG -->|"i_digitos, i_puntos"| MARC
     end
 
     subgraph PLED["PERIFERICO_LED"]
+        DEC_LED["DECOD_DIR<br/>addr_i == 00"]
         LREG["REG_LEDS<br/>un bit por fase"]
+        MUX_LED["MUX_RD<br/>rdata_o"]
+        DEC_LED --> LREG
+        LREG --> MUX_LED
     end
 
     subgraph BUZ["PERIFERICO_BUZZER"]
-        BREG["REG_SONIDO<br/>código de 3 bits"] --> SEQ["SECUENCIADOR_MELODIA"]
-        SEQ --> TONE["GENERADOR_TONO"]
+        DEC_BUZ["DECOD_DIR<br/>addr_i == 00"]
+        BREG["REG_SONIDO<br/>código de 3 bits"]
+        MUX_BUZ["MUX_RD<br/>rdata_o"]
+        SEQ["SECUENCIADOR_MELODIA<br/>ROM_MELODIAS y ROM_NOTAS"]
+        TONE["GENERADOR_TONO<br/>divisor de 18 bits"]
+        DEC_BUZ --> BREG
+        DEC_BUZ -->|"i_iniciar"| SEQ
+        BREG -->|"i_sonido"| SEQ
+        SEQ -->|"o_fin"| BREG
+        SEQ -->|"o_n, o_sonar"| TONE
+        BREG --> MUX_BUZ
     end
 
     CPU -->|"ProgAddress_o"| ROM
@@ -63,8 +84,9 @@ flowchart TD
     RMUX -->|"DataIn_i"| CPU
     AT -->|"ram_we"| RAM
     RAM --> RMUX
-    AT -->|"gpio_we = 0"| BTNREG
-    BTNREG -->|"rdata_o"| RMUX
+    AT -->|"gpio_we = 0, no se usa"| GPIO
+    BTNS["Botones del Jugador 1"] -->|"botones_i"| BTNREG
+    MUX_BTN -->|"rdata_o"| RMUX
     AT -->|"uart_we como write_enable_i"| DEC_UART
     CPU -->|"addr_i = DataAddress_o[3:2]<br/>wdata_i = DataOut_o"| DEC_UART
     MUX_UART -->|"rdata_o"| RMUX
@@ -72,12 +94,12 @@ flowchart TD
     CPU -->|"addr_i = DataAddress_o[10:2]<br/>wdata_i = DataOut_o"| VGA
     VGA -->|"rdata_o"| RMUX
     VGA -->|"vga_hsync_o, vga_vsync_o<br/>vga_r_o, vga_g_o, vga_b_o"| MON
-    AT -->|"display_we"| DREG
-    AT -->|"led_we"| LREG
-    AT -->|"buzzer_we"| BREG
-    DREG -->|"rdata_o"| RMUX
-    LREG -->|"rdata_o"| RMUX
-    BREG -->|"rdata_o"| RMUX
+    AT -->|"display_we como write_enable_i"| DEC_7
+    AT -->|"led_we como write_enable_i"| DEC_LED
+    AT -->|"buzzer_we como write_enable_i"| DEC_BUZ
+    MUX_7 -->|"rdata_o"| RMUX
+    MUX_LED -->|"rdata_o"| RMUX
+    MUX_BUZ -->|"rdata_o"| RMUX
     MARC -->|"seg_o, an_o, dp_o"| D7["Display de 7 segmentos"]
     LREG -->|"leds_o"| LEDS["LD0 a LD2"]
     TONE -->|"buzzer_o"| ZUMB["Buzzer"]
@@ -85,7 +107,7 @@ flowchart TD
     TX -->|"tx_o"| APP
 ```
 
-El procesador aparece como **un solo bloque**, sin mostrar sus partes internas. ROM y RAM son bloques separados: ROM entrega instrucciones directamente al procesador y RAM comparte el camino de datos con los periféricos. Dentro de `CONTROLADOR_MAPEO` están el Address Translator y el multiplexor de lectura. El AT solo recibe `DataAddress_o` y `we_o`, así que `DataOut_o` y los `addr_i` salen del procesador directo hacia cada destino, como dice [`Address_Translator.md`](../modulos/Address_Translator.md). A entradas, displays, LED y buzzer les llega `wdata_i = DataOut_o` y `addr_i` fijo en `2'b00`, que no se dibujan. Son **conexiones propuestas**, aún sin RTL de integración. Los registros y núcleos de `PERIFERICO_UART` sí corresponden a `src/design/periferico_uart.sv`, `uart_tx.sv` y `uart_rx.sv`. `clk_i` y `rst_i` llegan al periférico UART, aunque no se repitan en cada registro del dibujo.
+El procesador aparece como **un solo bloque**, sin mostrar sus partes internas. ROM y RAM son bloques separados: ROM entrega instrucciones directamente al procesador y RAM comparte el camino de datos con los periféricos. Dentro de `CONTROLADOR_MAPEO` están el Address Translator y el multiplexor de lectura. El AT solo recibe `DataAddress_o` y `we_o`, así que `DataOut_o` y los `addr_i` salen del procesador directo hacia cada destino, como dice [`Address_Translator.md`](../modulos/Address_Translator.md). A entradas, displays, LED y buzzer les llega `wdata_i = DataOut_o` y `addr_i` fijo en `2'b00`, que no se dibujan. Los bloques internos de los cinco periféricos de registros salen de su RTL, `periferico_uart.sv`, `periferico_entradas.sv`, `periferico_7seg.sv`, `periferico_led.sv` y `periferico_buzzer.sv`, con sus submódulos. Todavía no tienen RTL el procesador, la ROM, la RAM, el controlador de mapeo, el VGA ni el `top.sv` que los junta, así que las flechas que van de un bloque a otro son las conexiones que ese top tiene que hacer. `clk_i` y `rst_i` llegan a todos los periféricos, aunque no se repitan en cada registro del dibujo.
 
 ## Observaciones de integración
 
@@ -452,4 +474,6 @@ La privacidad se cumple en los dos únicos puntos por donde el programa saca inf
 
 Para transmitir un byte, el programa escribe en `0x0001_0044` y luego activa `send` en `0x0001_0040`. El decodificador de direcciones selecciona UART; sus registros alimentan `uart_tx`, que serializa el dato hacia la PC. Para recibirlo, `uart_rx` carga `reg_rx`, sube `new_rx` y el programa puede consultar `0x0001_0040`, leer `0x0001_0048` y limpiar la bandera. Las esperas del enlace se gestionan por sondeo de esos bits; UART no decide las jugadas. El orden exacto de esos accesos está en [Cómo usa la ROM el periférico](#cómo-usa-la-rom-el-periférico).
 
-Las conexiones completas del procesador con RAM, VGA y los demás periféricos siguen pendientes de integración. La organización interna del VGA descrita en su sección es una **propuesta** de diseño: la rama `feature/VGA` todavía no contiene RTL.
+Los otros cuatro periféricos no tienen protocolo. En cada vuelta del lazo el programa hace un `lw` a `0x0001_0120` para los botones, y cuando cambia algo que se ve en la tarjeta hace un `sw` al LED en cada cambio de fase, al buzzer en cada disparo o colocación inválida y al final de la partida, y a los displays cuando alguien gana. De los cuatro, el juego solo necesita leer los botones. Los otros tres también se pueden leer, lo que sirve para revisar en simulación qué escribió el programa.
+
+Las conexiones completas del procesador con RAM, VGA y los periféricos siguen pendientes de integración. La organización interna del VGA descrita en su sección es una **propuesta** de diseño: la rama `feature/VGA` todavía no contiene RTL.
