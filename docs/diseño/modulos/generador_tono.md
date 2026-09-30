@@ -102,8 +102,8 @@ maraña de compuertas.
 
 ### Latches
 
-Un solo `always_ff` con reset síncrono y un `assign` para la salida. No hay `always_comb`, así que no
-hay por dónde se cuele un latch.
+`reg_onda` y el contador de `u_cont` van cada uno en su `always_ff`, con `apagado` como reset síncrono.
+El comparador y la salida son `assign`. No hay `always_comb`, así que no hay por dónde se cuele un latch.
 
 ## i) Diagrama esquemático detallado del diseño
 
@@ -114,7 +114,9 @@ El esquemático sale de sintetizar el módulo con yosys, bajarlo a AND, OR, XOR,
 puede leer. Con más bits el contador y el comparador repiten la misma celda por bit, y lo que está
 fuera de ellos no cambia.
 
-Arriba está el módulo con `u_cont` y `u_cmp` como cajas. Abajo está cada uno abierto a compuertas.
+Arriba está el módulo con `u_cont` (`contador_limpiable`), `u_cmp` (`comparador_mayor_igual`) y
+`REG_ONDA`, el `always_ff` de las líneas 32 a 36 del `.sv`, como cajas. Abajo está cada uno abierto a
+compuertas.
 Cada compuerta o flip-flop lleva encima el nombre de la señal que produce cuando esa señal tiene
 nombre en el RTL. Las que no tienen nombre son la lógica que yosys arma para el reset y el `if` de
 cada registro.
