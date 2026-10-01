@@ -33,8 +33,9 @@ solo registra los pines y los entrega cuando el CPU lee esa dirección.
   solo porque es parte de la interfaz estándar de la sección 4.5.5.
 - `addr_i[1:0]`, dirección del registro, fija en `2'b00` en el top, ver el inciso f).
 - `wdata_i[WIDTH-1:0]`, desde `DataOut_o` del CPU. Se ignora igual que `write_enable_i`.
-- `botones_i[6:0]`, los siete botones del Jugador 1 directo de los pines, activos en alto. El orden es el
-  mismo de los bits del registro, `botones_i[0]` es `BTN_ARRIBA` y `botones_i[6]` es `BTN_RST`.
+- `botones_i[6:0]`, las siete entradas del Jugador 1 directo de los pines, activas en alto. Son los cinco
+  botones de la tarjeta y dos switches. El orden es el mismo de los bits del registro, `botones_i[0]` es
+  `BTN_ARRIBA` y `botones_i[6]` es `BTN_RST`.
 
 El módulo tiene el parámetro `WIDTH = 32`.
 
@@ -52,7 +53,7 @@ La dirección la decodifica el Address Translator del controlador de mapeo, deta
 palabra pone `mux_sel` en la entrada de botones. Por eso en el top `addr_i` va fijo en `2'b00`, igual que en
 los displays, el LED y el buzzer.
 
-Hacia afuera los pines van a los cinco botones de la Basys 3 y a dos botones externos en el Pmod JC.
+Hacia afuera los pines van a los cinco botones de la Basys 3 y a los switches SW0 y SW15.
 
 ## g) Explicación de funcionamiento
 
@@ -106,8 +107,8 @@ La sección 4.5.2 pide debouncing, pero según el profesor los botones de la Bas
 tarjeta y no hace falta repetirlo en el periférico. Con eso el `debounce` y el detector de flanco de
 `botones.sv` del Proyecto 2 no se traen. El flanco lo saca el programa, como se ve en el inciso g).
 
-Los dos botones externos de `BTN_SEL` y `BTN_RST` en el Pmod JC tampoco rebotan, así que se leen igual que
-los cinco de la tarjeta y los siete bits del registro se tratan igual.
+Los switches de `BTN_OK` y `BTN_RST` tampoco rebotan, así que se leen igual que los cinco botones y los
+siete bits del registro se tratan igual.
 
 ### REG_ESTADO
 
@@ -129,20 +130,27 @@ sincronizador.
 | `2'b00`    | `{{(WIDTH-7){1'b0}}, estado}`     |
 | resto      | `0`                               |
 
-### Pines de BTN_SEL y BTN_RST
+### Pines de BTN_SEL, BTN_OK y BTN_RST
 
-La Basys 3 trae cinco botones y el enunciado pide siete. Los cuatro de la cruz van a la navegación y el
-central a `BTN_OK`, como dice `nivel01.md`. `BTN_SEL` y `BTN_RST` van a los mismos pines del Pmod JC que en el
-Proyecto 2, N17 y P18, con los mismos dos botones externos. `BTN_RST` es el botón rojo. Pasarlos a switches
-no sirve, un switch no vuelve solo y cada confirmación o reinicio serían dos movimientos.
+La Basys 3 trae cinco botones y el enunciado pide siete entradas. Los cuatro de la cruz van a la navegación
+y el central a `BTN_SEL`, que es más simple para el Jugador 1 porque rotar el barco queda junto a las
+flechas. `BTN_OK` va en SW0 y `BTN_RST` en SW15, los dos extremos de la fila de switches. El Pmod JC queda
+solo con el buzzer.
+
+Un switch no vuelve solo. El programa saca el flanco de 0 a 1 igual que con los botones, así que lo que
+cuenta es el momento en que se sube, y hay que bajarlo antes de la siguiente confirmación o del siguiente
+reinicio. Dejar SW15 arriba reinicia la partida una sola vez.
 
 ### Reset y BTN_RST
 
-`rst_i` es el reinicio general. Después de `rst_i` los siete bits se leen en cero, que es lo correcto porque
-nadie está presionando nada al arrancar.
+`rst_i` es el reinicio general.
 
-`BTN_RST` no puede llegar a `rst_i` de este periférico. Si llegara, mientras el botón esté apretado
-`REG_ESTADO` estaría en reset y el bit 6 se leería en cero, así que el programa nunca vería la presión.
+Después de `rst_i` los siete bits se leen en cero y al ciclo siguiente ya siguen a los pines. Si SW0 o SW15
+quedaron arriba, ese bit sale en 1 desde el arranque. El programa tiene que tomar esa primera lectura como
+estado anterior para no contarla como flanco.
+
+`BTN_RST` no puede llegar a `rst_i` de este periférico. Si llegara, mientras SW15 esté arriba
+`REG_ESTADO` estaría en reset y el bit 6 se leería en cero, así que el programa nunca vería el flanco.
 `BTN_RST` es un bit más del registro, y el reinicio de la partida lo hace el programa, que es lo que ya dice
 `nivel01.md`.
 
@@ -179,9 +187,9 @@ quedar en `src/fpga/basys3.xdc`.
 - `botones_i[1]`, `BTN_ABAJO`, a U17, `btnD`.
 - `botones_i[2]`, `BTN_IZQ`, a W19, `btnL`.
 - `botones_i[3]`, `BTN_DER`, a T17, `btnR`.
-- `botones_i[4]`, `BTN_SEL`, a N17, pin JC3 del Pmod JC, igual que en el Proyecto 2.
-- `botones_i[5]`, `BTN_OK`, a U18, `btnC`.
-- `botones_i[6]`, `BTN_RST`, a P18, pin JC4 del Pmod JC, el botón rojo.
+- `botones_i[4]`, `BTN_SEL`, a U18, `btnC`.
+- `botones_i[5]`, `BTN_OK`, a V17, el switch SW0.
+- `botones_i[6]`, `BTN_RST`, a R2, el switch SW15.
 - Todos con `IOSTANDARD LVCMOS33`.
 
 Conexiones en el top.
