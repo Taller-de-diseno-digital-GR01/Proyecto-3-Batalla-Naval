@@ -44,9 +44,10 @@ direcciones y levanta banderas para que el programa en ensamblador las lea.
 Los puertos del bus llevan sufijo `_i`/`_o` en vez del prefijo `i_`/`o_` que usa el resto del
 repo, porque la sección 4.5.5 los nombra así y la interfaz es de cumplimiento obligatorio.
 
-El módulo está parametrizado con `WIDTH = 32`, `TICKS_BIT = 868` y `TICKS_X16 = 54`. Los dos
-últimos se le pasan tal cual a los núcleos, y en simulación se reescalan a valores chicos para no
-esperar 8680 ciclos por byte.
+El módulo está parametrizado con `WIDTH = 32`, `CLK_FREQ_HZ = 100_000_000` y `BAUDIOS = 115200`.
+De los dos últimos salen `TICKS_BIT` y `TICKS_X16`, que son `localparam` y se le pasan a los núcleos.
+Si `clk_i` deja de ser de 100 MHz basta con cambiar `CLK_FREQ_HZ` al instanciar, y en simulación se
+baja para no esperar 8680 ciclos por byte.
 
 ## e) Salidas
 
@@ -180,6 +181,18 @@ ahí muestrea cada 16 ticks. El último bit de datos lo muestrea en el tick 136,
 ciclos. El desfase acumulado es de 35 ciclos contra los 434 que serían medio bit, más de diez
 veces de margen.
 
+Los dos divisores se calculan redondeando al entero más cercano, `TICKS_BIT` como
+`(CLK_FREQ_HZ + BAUDIOS / 2) / BAUDIOS` y `TICKS_X16` como
+`(CLK_FREQ_HZ + BAUDIOS * 8) / (BAUDIOS * 16)`. Con un reloj más lento el transmisor sigue quedando
+por debajo de 0.3% de error, pero el divisor del receptor se hace chico y el redondeo pesa más.
+
+- 50 MHz, `TICKS_X16 = 27`, 0.47% de error, igual que a 100 MHz.
+- 20 MHz, `TICKS_X16 = 11`, 1.4%.
+- 25 MHz, `TICKS_X16 = 14`, 3.1%. El último bit de datos se muestrea con un 27% de bit de desfase,
+  todavía cae dentro del bit pero con poco margen.
+- 12.5 MHz, `TICKS_X16 = 7`, 3.1%, igual que a 25 MHz.
+- 10 MHz, `TICKS_X16 = 5`, 8.5%. El desfase pasa de medio bit antes del último dato y no recibe.
+
 ### La ventana muerta del núcleo de transmisión
 
 `uart_tx` levanta `limpiar_arranque` en el estado `PARADA` y solo lo baja en el siguiente tick, ya en
@@ -217,8 +230,8 @@ produce cuando esa señal tiene nombre en el RTL. Las que no tienen nombre son l
 para el reset y los `if` de cada registro.
 
 Arriba está el periférico con los dos núcleos y los cuatro bloques del nivel 3 como cajas. Cada bloque
-sale de un `always` del `.sv`, `REG_DATOS_TX` de las líneas 49 a 52, `REG_DATOS_RX` de 54 a 58,
-`REG_CONTROL` de 60 a 71 y `MUX_RD` de 73 a 80, y abajo está cada uno abierto a compuertas. Los núcleos
+sale de un `always` del `.sv`, `REG_DATOS_TX` de las líneas 53 a 56, `REG_DATOS_RX` de 58 a 62,
+`REG_CONTROL` de 64 a 75 y `MUX_RD` de 77 a 84, y abajo está cada uno abierto a compuertas. Los núcleos
 se abren en sus propios docs.
 
 Se genera con el dato de 2 bits y el bus de 4 en vez de 8 y 32, porque con los anchos reales el mux de
