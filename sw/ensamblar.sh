@@ -24,8 +24,10 @@ DIR=$(dirname "$FUENTE")
 BUILD="$DIR/build"
 P=riscv64-unknown-elf
 
-# Lista base del instructivo. El instructivo escribe "sltui", el nombre real es sltiu.
-PERMITIDAS='lw|sw|sll|slli|srl|srli|sra|srai|add|and|xor|or|sub|addi|andi|xori|ori|beq|bne|blt|bge|slt|slti|sltu|sltiu|jal|jalr'
+# Lista base del instructivo mas lui, que arma las direcciones base en una instruccion.
+# El instructivo escribe "sltui", el nombre real es sltiu.
+# auipc queda fuera: en lugar de "call X" se escribe "jal ra, X".
+PERMITIDAS='lw|sw|sll|slli|srl|srli|sra|srai|add|and|xor|or|sub|addi|andi|xori|ori|beq|bne|blt|bge|slt|slti|sltu|sltiu|jal|jalr|lui'
 
 mkdir -p "$BUILD"
 
