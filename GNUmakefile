@@ -66,7 +66,7 @@ BIT        ?= $(BIT_OUT)
 # el build si src/build/ quedó con binarios de otra máquina
 TOOLCHAIN_STAMP := $(BUILD_DIR)/.toolchain
 
-.PHONY: all help list sim wave dump test synth bitstream program connect clean check-tb check-fpga-toolchain FORCE
+.PHONY: all help list sim wave dump test synth bitstream program flash connect clean check-tb check-fpga-toolchain FORCE
 
 # Si una receta falla, borra el archivo que estaba generando. Sin esto un paso que
 # escribe con redirección (ej. fasm2frames > top.frames) deja un archivo vacío que
@@ -88,6 +88,8 @@ help:
 	@echo "                        correr 'source .../export.sh' antes"
 	@echo "make program            reconstruye el bitstream si hace falta y lo carga al Basys3 con openFPGALoader"
 	@echo "make program BIT=<archivo.bit>  carga ese .bit tal cual, sin reconstruir nada"
+	@echo "make flash              igual que program pero graba el bitstream en la flash, para que el botón PROG reconfigure"
+	@echo "                        la FPGA sin la PC. Acepta BIT= igual, y la tarjeta arranca de ahí con el jumper JP1 en QSPI"
 	@echo "make connect             verifica que la Basys3 esté detectable por USB/JTAG antes de programar"
 	@echo "make clean"
 	@echo ""
@@ -288,6 +290,10 @@ endif
 
 program: $(PROGRAM_DEPS)
 	$(PRIV) $(OPENFPGALOADER) -b $(BOARD) $(BIT)
+
+# make program deja el diseño solo en la SRAM de la FPGA y PROG lo borra, y como el reinicio general del proyecto es PROG el bitstream tiene que estar en la flash
+flash: $(PROGRAM_DEPS)
+	$(PRIV) $(OPENFPGALOADER) -b $(BOARD) -f $(BIT)
 
 test: check-tb # <-- Esto corre make sim para cada testbench en $(TBS), uno por uno
 	@estado=0; \
