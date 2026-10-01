@@ -60,7 +60,7 @@ flowchart TD
 
 ### Bloque 1: MMCM
 
-Saca del único reloj de 100 MHz los dos relojes del sistema, `clk_i` de 100 MHz para el procesador, las memorias y los periféricos, y `clk_pix` de 25 MHz para el VGA. Como los dos salen del mismo MMCM quedan relacionados en fase, que es lo que usa `PERIFERICO_VGA.md` para justificar el cruce de dominios. Con openXC7 no hay Clocking Wizard, así que la primitiva `MMCME2_BASE` se instancia a mano. El enunciado también deja abierta la opción de sacar un reloj aparte para la UART, pero no hace falta, `PERIFERICO_UART` usa los mismos 100 MHz de `clk_i` y saca los 115200 baudios con contadores internos. Si `clk_i` dejara de ser de 100 MHz habría que recalcular `TICKS_BIT` y `TICKS_X16`.
+Saca del único reloj de 100 MHz los dos relojes del sistema, `clk_i` de 100 MHz para el procesador, las memorias y los periféricos, y `clk_pix` de 25 MHz para el VGA. Como los dos salen del mismo MMCM quedan relacionados en fase, que es lo que usa `PERIFERICO_VGA.md` para justificar el cruce de dominios. Con openXC7 no hay Clocking Wizard, así que la primitiva `MMCME2_BASE` se instancia a mano. El enunciado también deja abierta la opción de sacar un reloj aparte para la UART, pero no hace falta, `PERIFERICO_UART` usa los mismos 100 MHz de `clk_i` y saca los 115200 baudios con contadores internos. Si `clk_i` dejara de ser de 100 MHz se le pasa la frecuencia nueva en el parámetro `CLK_FREQ_HZ` y el periférico recalcula sus divisores.
 
 - Entradas, `clk` de 100 MHz del pin W5.
 - Salidas, `clk_i` de 100 MHz hacia todos los bloques y `clk_pix` de 25 MHz hacia `PERIFERICO_VGA`.
