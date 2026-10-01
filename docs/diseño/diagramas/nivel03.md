@@ -376,7 +376,7 @@ El procesador es el núcleo de ciclo único de [riscv-simple-sv](https://github.
 
 Para el programa eso significa:
 
-- **Las direcciones se arman con `lui`.** Cada dirección base sale de una sola instrucción (tabla de abajo), y el programa puede usar `li`, `la` y `call` sin restricción.
+- **El programa usa la lista base del instructivo más `lui`.** El instructivo presenta la lista como una base, y `lui` arma cada dirección base en una sola instrucción (tabla de abajo) y permite `li` con cualquier constante. El resto de lo que implementa el núcleo no se usa, para no sumar instrucciones que verificar y justificar. Sin `auipc`, las subrutinas se llaman con `jal ra, NOMBRE` en lugar de `call`, y no se usa `la`. El detalle está en la sección 1.1 de [`PROGRAMA.md`](../modulos/PROGRAMA.md).
 - **Los periféricos y la memoria de video se acceden solo con `lw` y `sw`.** El núcleo genera habilitaciones por byte para `sb` y `sh`, pero la interfaz estándar de periféricos del instructivo no las tiene. Un `sb` a un periférico escribiría la palabra entera con el dato desplazado. En la RAM las variables y las casillas también ocupan una palabra, para que todo el programa use las mismas dos instrucciones de memoria.
 - **No hay `mul`.** Los índices salen con desplazamientos: `fila × 8 = fila << 3` para los tableros y `fila × 20 = (fila << 4) + (fila << 2)` para la memoria de video.
 - **La ROM no está en el bus de datos.** El Address Translator no la mapea, así que el programa no puede leer tablas constantes de la ROM con `lw`. Las constantes van como inmediatos. La longitud de un barco, por ejemplo, sale de `4 − id` (4, 3 y 2 casillas para los id 0, 1 y 2).
