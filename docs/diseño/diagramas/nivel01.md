@@ -6,7 +6,7 @@
 flowchart LR
     subgraph Entradas
         CLK(["clk 100 MHz"])
-        RST(["rst del sistema"])
+        RST(["PROG<br/>reinicio general"])
         NAV(["BTN_ARRIBA, BTN_ABAJO,<br/>BTN_IZQ, BTN_DER"])
         SEL(["BTN_SEL"])
         OK(["BTN_OK"])
@@ -49,14 +49,14 @@ flowchart LR
 ### Entradas
 
 - `clk`, reloj de 100 MHz de la Basys 3, pin W5. Es el único reloj que entra al sistema.
-- `rst`, reinicio general del hardware. Es lo único que pone en cero las partidas ganadas.
+- PROG, reinicio general del hardware. Es el botón PROG de la Basys 3, que vuelve a configurar la FPGA con el bitstream guardado en la flash. Adentro `rst_i` sale de `locked` del MMCM. Es lo único que pone en cero las partidas ganadas.
 - `BTN_ARRIBA`, `BTN_ABAJO`, `BTN_IZQ`, `BTN_DER`, navegación del cursor del Jugador 1, en `btnU`, `btnD`, `btnL` y `btnR` de la Basys 3.
-- `BTN_SEL`, rota la orientación del barco que se está colocando, en JC3 del Pmod JC.
-- `BTN_OK`, confirma una colocación o un disparo, en `btnC`.
-- `BTN_RST`, el botón rojo, en JC4 del Pmod JC. Reinicia la partida y conserva los contadores de ganadas. Lo lee el programa, no reinicia el hardware.
+- `BTN_SEL`, rota la orientación del barco que se está colocando, en `btnC`.
+- `BTN_OK`, confirma una colocación o un disparo, en el switch SW0.
+- `BTN_RST`, en el switch SW15. Reinicia la partida y conserva los contadores de ganadas. Lo lee el programa, no reinicia el hardware.
 - `rx`, línea serial que llega desde la aplicación de PC por el puente USB-UART, pin B18. Trae las colocaciones y los disparos del Jugador 2.
 
-La Basys 3 trae cinco botones y el enunciado pide siete, por eso `BTN_SEL` y `BTN_RST` van en el Pmod JC, igual que en el Proyecto 2.
+La Basys 3 trae cinco botones y el enunciado pide siete entradas, por eso `BTN_OK` y `BTN_RST` van en switches. Cuentan al subirlos, y hay que bajarlos antes de volver a usarlos.
 
 ### Salidas
 
@@ -74,7 +74,7 @@ Al arrancar, el procesador ejecuta el programa desde la dirección `0x0000_0000`
 
 En la colocación los dos jugadores avanzan a la vez. El lazo sondea los botones del Jugador 1 y los bytes que entran por `rx` sin quedarse esperando a ninguno, así que el Jugador 1 mueve su cursor en el VGA mientras el Jugador 2 manda sus barcos desde la PC. Cada colocación del Jugador 2 recibe por `tx` una respuesta de aceptada o rechazada.
 
-Cuando los dos terminan, arranca la batalla. El turno se alterna tras cada disparo válido y cada resultado se refleja en el VGA, en el buzzer y en un mensaje por `tx`. La partida acaba cuando una flota queda hundida. El resultado se muestra en el VGA y se manda un resumen por `tx`, suena la secuencia de victoria y se suma una partida ganada en los 7 segmentos. El sistema se queda así hasta que se presione `BTN_RST`.
+Cuando los dos terminan, arranca la batalla. El turno se alterna tras cada disparo válido y cada resultado se refleja en el VGA, en el buzzer y en un mensaje por `tx`. La partida acaba cuando una flota queda hundida. El resultado se muestra en el VGA y se manda un resumen por `tx`, suena la secuencia de victoria y se suma una partida ganada en los 7 segmentos. El sistema se queda así hasta que se suba `BTN_RST`.
 
 Por `tx` nunca sale nada del tablero del Jugador 1 aparte del resultado de los disparos del Jugador 2. El VGA tampoco dibuja los barcos del Jugador 2. Así ninguno de los dos jugadores puede ver la flota del otro.
 
