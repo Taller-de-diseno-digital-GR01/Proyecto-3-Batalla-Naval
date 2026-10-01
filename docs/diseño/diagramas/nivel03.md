@@ -207,10 +207,10 @@ El diseño del Proyecto 3 tiene **un único maestro del periférico, el procesad
 
 El bloque sigue [`periferico_entradas.sv`](../../../src/design/periferico_entradas.sv). La ficha completa, con los puntos a) a j), está en [`PERIFERICO_ENTRADAS.md`](../modulos/PERIFERICO_ENTRADAS.md).
 
-- **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Los pines son `botones_i[6:0]`, los cinco botones de la Basys 3 y `BTN_SEL` y `BTN_RST` en N17 y P18 del Pmod JC.
+- **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Los pines son `botones_i[6:0]`, los cinco botones de la Basys 3, con `BTN_SEL` en `btnC`, y `BTN_OK` y `BTN_RST` en los switches SW0 (V17) y SW15 (R2).
 - **Selección.** El Address Translator pone `mux_sel` en `010` solo con `0x0001_0120`. El registro es de solo lectura, así que `gpio_we` queda fijo en cero, y `write_enable_i` y `wdata_i` llegan al periférico solo porque son parte de la interfaz estándar. `addr_i` va fijo en `2'b00`.
 
-No hay `DECOD_DIR` porque no hay nada que escribir, y tampoco antirrebote. Según el profesor los botones de la tarjeta ya llegan filtrados, y los dos del Pmod JC tampoco rebotan. Los flancos los saca el programa con `actual & ~botones_prev`.
+No hay `DECOD_DIR` porque no hay nada que escribir, y tampoco antirrebote. Según el profesor los botones de la tarjeta ya llegan filtrados, y los dos switches tampoco rebotan. Los flancos los saca el programa con `actual & ~botones_prev`.
 
 ### REG_ESTADO
 
@@ -219,7 +219,7 @@ Copia los siete pines en cada flanco del reloj.
 - Entradas, `botones_i[6:0]`.
 - Salidas, `estado[6:0]` hacia `MUX_RD`.
 
-Registro de 7 bits con reset síncrono y sin habilitación. Está para que el pin, que es asíncrono, termine en un flip-flop y no llegue combinacional hasta `DataIn_i`. `BTN_RST` es el bit 6 y no llega a `rst_i`, si llegara el registro estaría en reset mientras el botón está apretado y el programa nunca vería la presión.
+Registro de 7 bits con reset síncrono y sin habilitación. Está para que el pin, que es asíncrono, termine en un flip-flop y no llegue combinacional hasta `DataIn_i`. `BTN_RST` es el bit 6 y no llega a `rst_i`, si llegara el registro estaría en reset mientras SW15 esté arriba y el programa nunca vería el flanco.
 
 ### MUX_RD
 
@@ -521,7 +521,7 @@ flowchart TD
     FIN -->|"BTN_RST"| NP
 ```
 
-El programa tiene dos entradas. El arranque por `rst_i` es el reinicio general del sistema: carga los registros base y pone en cero las partidas ganadas. `BTN_RST` salta directo a `NUEVA_PARTIDA` y conserva las ganadas, como pide el instructivo.
+El programa tiene dos entradas. El arranque por `rst_i` es el reinicio general del sistema, que se dispara con el botón PROG: carga los registros base y pone en cero las partidas ganadas. `BTN_RST` salta directo a `NUEVA_PARTIDA` y conserva las ganadas, como pide el instructivo.
 
 Cada fase es un **lazo que nunca espera**. En cada vuelta el programa lee los botones una vez, atiende como máximo un byte de la UART y vuelve a empezar. La única espera es la transmisión de una trama, que está acotada y se explica en los mensajes UART. Así el Jugador 1 y el Jugador 2 avanzan a la vez sin que uno bloquee al otro, que es lo que exige la colocación concurrente. Los botones se leen por flanco, `flancos = actual & ~botones_prev`, porque el periférico de entradas entrega niveles y una presión larga se vería en muchas vueltas seguidas. `BTN_RST` se revisa en todas las vueltas de las tres fases.
 
