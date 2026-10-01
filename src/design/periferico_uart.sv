@@ -1,4 +1,4 @@
-module periferico_uart #(parameter WIDTH = 32, parameter TICKS_BIT = 868, parameter TICKS_X16 = 54) (
+module periferico_uart #(parameter WIDTH = 32, parameter CLK_FREQ_HZ = 100_000_000, parameter BAUDIOS = 115200) (
   input logic clk_i,
   input logic rst_i,
   input logic write_enable_i,
@@ -19,6 +19,10 @@ module periferico_uart #(parameter WIDTH = 32, parameter TICKS_BIT = 868, parame
 
   // El dato serial son 8 bits fijos, los nucleos del curso los traen asi y no depende del ancho del bus
   localparam int BYTE_WIDTH = 8;
+
+  // La division va redondeada, truncando el divisor del receptor se desvia varios puntos porcentuales cuando el reloj baja de 100 MHz
+  localparam int TICKS_BIT = (CLK_FREQ_HZ + BAUDIOS / 2) / BAUDIOS;
+  localparam int TICKS_X16 = (CLK_FREQ_HZ + BAUDIOS * 8) / (BAUDIOS * 16);
 
   logic [BYTE_WIDTH-1:0] reg_tx;
   logic [BYTE_WIDTH-1:0] reg_rx;

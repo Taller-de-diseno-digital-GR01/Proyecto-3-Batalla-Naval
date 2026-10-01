@@ -13,6 +13,6 @@ endmodule
 V
 bash "$D/sintetizar.sh" uart_tx uart_tx.sv "-set TICKS_BIT 4" FSM DIVISOR:27-40 CAPTURA:43-49 CONT_INDICE:52-55 FSM:57-95 DETECTOR_FIN:98-107
 bash "$D/sintetizar.sh" uart_rx uart_rx.sv "-set TICKS_X16 4" FSM DIVISOR:25-38 FSM:40-89 DETECTOR_FIN:92-101
-EXTRA=cajas.sv bash "$D/sintetizar.sh" periferico_uart periferico_uart.sv "-set WIDTH 4" "" REG_DATOS_TX:49-52 REG_DATOS_RX:54-58 REG_CONTROL:60-71 MUX_RD:73-80
+EXTRA=cajas.sv bash "$D/sintetizar.sh" periferico_uart periferico_uart.sv "-set WIDTH 4" "" REG_DATOS_TX:53-56 REG_DATOS_RX:58-62 REG_CONTROL:64-75 MUX_RD:77-84
 for t in periferico_uart uart_tx uart_rx; do bash "$D/componer.sh" $t.all.json $t "$R/docs/diseño/diagramas/$t.png"; done
 rm -rf $T
