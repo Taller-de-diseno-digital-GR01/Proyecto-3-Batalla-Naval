@@ -39,8 +39,7 @@ PRJXRAY_DB_ROOT := $(PRJXRAY_DB_DIR)/artix7
 CHIPDB          := $(OPENXC7)/share/nextpnr-xilinx/chipdb/xc7a35tcpg236.bin
 XDC             := src/fpga/basys3.xdc
 
-APP_DIR    := sw
-PYTHON     := python3
+PYTHON := python3
 
 DESIGN_SRCS := $(wildcard $(DESIGN_DIR)/*.sv)
 TB_SRCS     := $(wildcard $(SIM_DIR)/tb_*.sv)
@@ -67,24 +66,22 @@ BIT        ?= $(BIT_OUT)
 # el build si src/build/ quedó con binarios de otra máquina
 TOOLCHAIN_STAMP := $(BUILD_DIR)/.toolchain
 
-.PHONY: all help list sim wave dump test test-app test-teclado synth bitstream program connect app clean check-tb check-fpga-toolchain FORCE
+.PHONY: all help list sim wave dump test synth bitstream program connect clean check-tb check-fpga-toolchain FORCE
 
 # Si una receta falla, borra el archivo que estaba generando. Sin esto un paso que
 # escribe con redirección (ej. fasm2frames > top.frames) deja un archivo vacío que
 # make da por hecho la próxima vez, y el .bit sale en blanco sin avisar.
 .DELETE_ON_ERROR:
 
-all: bitstream program app
+all: bitstream program
 
 help:
-	@echo "make all                genera el bitstream, lo carga a la FPGA, y abre la app de PC (bitstream + program + app)"
+	@echo "make all                genera el bitstream y lo carga a la FPGA (bitstream + program)"
 	@echo "make list              lista los testbenches disponibles"
 	@echo "make sim  TB=<modulo>  compila y corre src/sim/tb_<modulo>.sv"
 	@echo "make wave TB=<modulo>  corre la simulación y abre GTKWave"
 	@echo "make dump TB=<modulo> SIGS=sig1,sig2,...  corre la simulación y exporta un SVG con vecdump"
-	@echo "make test"
-	@echo "make test-app           corre las pruebas de la app de PC con unittest, no necesita la tarjeta"
-	@echo "make test-teclado       muestra el byte que sale por cada tecla, pide una terminal interactiva"
+	@echo "make test               corre todos los testbenches, uno por uno"
 	@echo "make synth SYNTH_TOP=<modulo>  sintetiza con yosys (genérico) y revisa que no haya latches inferidos"
 	@echo "make bitstream          genera $(BIT_OUT) con yosys + nextpnr-xilinx + prjxray (openXC7, sin Vivado)"
 	@echo "                        toma el toolchain de OPENXC7=$(OPENXC7) y PRJXRAY_PY=$(PRJXRAY_PY), no hace falta"
@@ -92,7 +89,6 @@ help:
 	@echo "make program            reconstruye el bitstream si hace falta y lo carga al Basys3 con openFPGALoader"
 	@echo "make program BIT=<archivo.bit>  carga ese .bit tal cual, sin reconstruir nada"
 	@echo "make connect             verifica que la Basys3 esté detectable por USB/JTAG antes de programar"
-	@echo "make app                 corre la app de PC (terminal remota del ahorcado por UART)"
 	@echo "make clean"
 	@echo ""
 	@echo "Testbenches disponibles, $(TBS)"
@@ -135,13 +131,13 @@ wave: sim
 
 dump: sim
 ifeq ($(strip $(SIGS)),)
-	$(error Uso, make dump TB=<modulo> SIGS=sig1,sig2,...  ej. make dump TB=hit_counter SIGS=clk,rst,hit,acierto)
+	$(error Uso, make dump TB=<modulo> SIGS=sig1,sig2,...  ej. make dump TB=marcador SIGS=clk,rst,o_an)
 endif
 	$(VECDUMP) $(VCD_OUT) -s $(SIGS) -o $(SVG_OUT)
 	@echo ".svg generado en $(SVG_OUT)"
 
 # Ej:
-# make dump TB=hit_counter SIGS=clk_tb,rst_tb,nueva_partida_tb,hit_tb,acierto_tb
+# make dump TB=marcador SIGS=clk,rst,o_an
 # Hay que conocer las señales que se quieren ver, eso es lo único malo.
 
 $(NETLIST_OUT): $(DESIGN_SRCS) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
@@ -169,7 +165,7 @@ $(NETLIST_OUT): $(DESIGN_SRCS) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
 	tail -n +$$stat_line $(SYNTH_LOG)
 
 # Nota: SYNTH_TOP debe ser un módulo instanciable de verdad (ej. top, o cualquier
-# módulo hoja como hit_counter). No sirve para testbenches (tb_*.sv no está en DESIGN_SRCS).
+# módulo hoja como marcador). No sirve para testbenches (tb_*.sv no está en DESIGN_SRCS).
 synth: $(NETLIST_OUT)
 	@echo "Netlist generado en $(NETLIST_OUT)"
 
@@ -293,10 +289,6 @@ endif
 program: $(PROGRAM_DEPS)
 	$(PRIV) $(OPENFPGALOADER) -b $(BOARD) $(BIT)
 
-# Terminal interactiva, busca la tarjeta sola si no se pasa PUERTO
-app:
-	$(PYTHON) $(APP_DIR)/ahorcado_pc.py $(if $(PUERTO),-p $(PUERTO))
-
 test: check-tb # <-- Esto corre make sim para cada testbench en $(TBS), uno por uno
 	@estado=0; \
 	for modulo in $(TBS); do \
@@ -304,14 +296,6 @@ test: check-tb # <-- Esto corre make sim para cada testbench en $(TBS), uno por 
 		$(MAKE) --no-print-directory sim TB=$$modulo || estado=1; \
 	done; \
 	exit $$estado
-
-# -t $(APP_DIR) es lo que deja importar los modulos sin paquete, igual que cuando corre la app
-test-app:
-	$(PYTHON) -m unittest discover -s $(APP_DIR)/pruebas -t $(APP_DIR)
-
-# PYTHONPATH porque el script vive en pruebas/ pero importa los modulos de $(APP_DIR)
-test-teclado:
-	@PYTHONPATH=$(APP_DIR) $(PYTHON) $(APP_DIR)/pruebas/teclado.py
 
 clean:
 	rm -rf $(BUILD_DIR)
