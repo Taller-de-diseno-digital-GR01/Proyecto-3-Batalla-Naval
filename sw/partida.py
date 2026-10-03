@@ -85,9 +85,8 @@ class Partida:
             return None
         fila, columna = self.cursor
         if self.fase == COLOCACION and self.barco is not None:
-            datos = (self.barco, fila, columna, self.vertical)
-            self.pendiente = (protocolo.MSG_COLOCAR, datos, ahora)
-            return protocolo.codificar_colocar(*datos)
+            self.pendiente = (protocolo.MSG_COLOCAR, (self.barco, fila, columna, self.vertical), ahora)
+            return protocolo.codificar_colocar(self.barco, self.vertical, fila, columna)
         if self.me_toca:
             self.pendiente = (protocolo.MSG_DISPARO, (fila, columna), ahora)
             return protocolo.codificar_disparo(fila, columna)
