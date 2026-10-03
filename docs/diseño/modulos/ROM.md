@@ -37,11 +37,6 @@ relativa a la carpeta desde donde corre la herramienta, y el `GNUmakefile` usa d
 - `make sim` corre la simulación desde `src/build/`. Los testbenches pasan su propia ruta relativa a esa
   carpeta, por ejemplo `"../sim/rom_prueba.hex"` o `"../../sw/programa.hex"`.
 
-iverilog compila todos los módulos de `src/design/` con cada testbench, y los que nadie instancia quedan como
-raíz con sus parámetros por defecto. Mientras no exista `top.sv`, la ROM es uno de ellos, así que los demás
-testbenches muestran un aviso de `$readmemh` que no encuentra `sw/programa.hex`. Es inofensivo, porque esa ROM
-suelta no está conectada a nada.
-
 El tamaño no es un parámetro. `localparam PALABRAS = 2048` sale del mapa de memoria de la sección 4.4.2
 (8 KB, de `0x0000_0000` a `0x0000_1FFF`).
 
@@ -72,7 +67,7 @@ En cada ciclo el procesador pone el `PC` en `addr_i` y la ROM devuelve en `instr
 palabra **en el mismo ciclo**, sin esperar un flanco de reloj. Por ejemplo, con el programa actual:
 
 | `PC` | Palabra | `instr_o` | Instrucción |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `0x0000_0000` | 0 | `0x0001_0437` | `lui s0, 0x10` |
 | `0x0000_0004` | 1 | `0x0001_14B7` | `lui s1, 0x11` |
 | `0x0000_0008` | 2 | `0x0000_2937` | `lui s2, 0x2` |
@@ -100,7 +95,7 @@ completo junto con la RAM, con unas 1790 LUT entre las dos (cerca del 9 % del XC
 ### Decodificación de la dirección
 
 | Bits de `addr_i` | Uso |
-|---|---|
+| --- | --- |
 | `[1:0]` | Se ignoran. Toda instrucción de rv32i está alineada a 4 bytes, así que el `PC` siempre termina en `00`. |
 | `[12:2]` | Índice de la palabra, de 0 a 2047. |
 | `[31:13]` | Se ignoran. |
