@@ -3,7 +3,9 @@ SIM_DIR    := src/sim
 BUILD_DIR  := src/build
 
 IVERILOG       := iverilog
-IVERILOG_FLAGS := -g2012
+# -I para los `include "config.sv" y "constants.sv" del núcleo RISC-V. yosys los busca solo
+# en la carpeta del archivo que los incluye, iverilog no
+IVERILOG_FLAGS := -g2012 -I $(DESIGN_DIR)
 VVP            := vvp
 GTKWAVE        := gtkwave
 VECDUMP        := vecdump # Programa para pasar de .vcd a .svg
