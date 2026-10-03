@@ -1,0 +1,23 @@
+// Contenido de prueba para tb_rom.sv. La palabra n vale C0DE_0000 + n.
+// Se cargan tres tramos: el principio, el medio y la ultima palabra.
+// Lo que queda en medio no se carga y tiene que leerse como X.
+@000
+C0DE0000
+C0DE0001
+C0DE0002
+C0DE0003
+C0DE0004
+C0DE0005
+C0DE0006
+C0DE0007
+@400
+C0DE0400
+C0DE0401
+C0DE0402
+C0DE0403
+C0DE0404
+C0DE0405
+C0DE0406
+C0DE0407
+@7FF
+C0DE07FF

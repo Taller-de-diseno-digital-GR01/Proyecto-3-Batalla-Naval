@@ -3,7 +3,9 @@ SIM_DIR    := src/sim
 BUILD_DIR  := src/build
 
 IVERILOG       := iverilog
-IVERILOG_FLAGS := -g2012
+# -I para los `include "config.sv" y "constants.sv" del núcleo RISC-V. yosys los busca solo
+# en la carpeta del archivo que los incluye, iverilog no
+IVERILOG_FLAGS := -g2012 -I $(DESIGN_DIR)
 VVP            := vvp
 GTKWAVE        := gtkwave
 VECDUMP        := vecdump # Programa para pasar de .vcd a .svg
@@ -48,6 +50,12 @@ TBS         := $(patsubst $(SIM_DIR)/tb_%.sv,%,$(TB_SRCS))
 TB ?= $(firstword $(TBS))
 SYNTH_TOP ?= top
 
+# Programa en ensamblador que carga la ROM con $readmemh. ensamblar.sh usa binutils de GNU
+# para RISC-V (riscv64-unknown-elf-*), que solo hacen falta para volver a ensamblar.
+PROG_SRC  := sw/programa.s
+PROG_HEX  := sw/programa.hex
+ENSAMBLAR := sw/ensamblar.sh
+
 VVP_OUT := $(BUILD_DIR)/tb_$(TB).vvp
 VCD_OUT := $(BUILD_DIR)/tb_$(TB).vcd
 SVG_OUT := $(BUILD_DIR)/tb_$(TB).svg
@@ -66,7 +74,7 @@ BIT        ?= $(BIT_OUT)
 # el build si src/build/ quedó con binarios de otra máquina
 TOOLCHAIN_STAMP := $(BUILD_DIR)/.toolchain
 
-.PHONY: all help list sim wave dump test synth bitstream program flash connect clean check-tb check-fpga-toolchain FORCE
+.PHONY: all help list sim wave dump test synth bitstream program flash connect clean check-tb check-fpga-toolchain programa FORCE
 
 # Si una receta falla, borra el archivo que estaba generando. Sin esto un paso que
 # escribe con redirección (ej. fasm2frames > top.frames) deja un archivo vacío que
@@ -82,6 +90,7 @@ help:
 	@echo "make wave TB=<modulo>  corre la simulación y abre GTKWave"
 	@echo "make dump TB=<modulo> SIGS=sig1,sig2,...  corre la simulación y exporta un SVG con vecdump"
 	@echo "make test               corre todos los testbenches, uno por uno"
+	@echo "make programa           ensambla $(PROG_SRC) con $(ENSAMBLAR) y regenera $(PROG_HEX)"
 	@echo "make synth SYNTH_TOP=<modulo>  sintetiza con yosys (genérico) y revisa que no haya latches inferidos"
 	@echo "make bitstream          genera $(BIT_OUT) con yosys + nextpnr-xilinx + prjxray (openXC7, sin Vivado)"
 	@echo "                        toma el toolchain de OPENXC7=$(OPENXC7) y PRJXRAY_PY=$(PRJXRAY_PY), no hace falta"
@@ -142,7 +151,19 @@ endif
 # make dump TB=marcador SIGS=clk,rst,o_an
 # Hay que conocer las señales que se quieren ver, eso es lo único malo.
 
-$(NETLIST_OUT): $(DESIGN_SRCS) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
+# programa.hex va versionado, así que esta regla no depende de programa.s y solo corre si
+# el .hex falta. Si dependiera del .s, después de un clone o un checkout las fechas de los
+# dos archivos quedan en cualquier orden y make intentaría ensamblar en una máquina sin
+# binutils de RISC-V. Para volver a ensamblar después de cambiar el programa: make programa
+$(PROG_HEX):
+	bash $(ENSAMBLAR) $(PROG_SRC)
+
+programa:
+	bash $(ENSAMBLAR) $(PROG_SRC)
+
+# $(PROG_HEX) está en los prerrequisitos de la síntesis porque la ROM lo lee con $readmemh:
+# si falta se genera, y si cambia se vuelve a sintetizar
+$(NETLIST_OUT): $(DESIGN_SRCS) $(PROG_HEX) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
 	@$(YOSYS) -p " \
 		read_verilog -sv $(DESIGN_SRCS); \
 		hierarchy -check -top $(SYNTH_TOP); \
@@ -194,7 +215,7 @@ check-fpga-toolchain:
 
 # Bitstream para el Basys3 (XC7A35T, part $(PART)) con el toolchain openXC7 (yosys ->
 # nextpnr-xilinx -> fasm2frames -> xc7frames2bit), sin Vivado. Ver src/fpga/basys3.xdc.
-$(JSON_OUT): $(DESIGN_SRCS) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
+$(JSON_OUT): $(DESIGN_SRCS) $(PROG_HEX) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
 	$(YOSYS) -p " \
 		read_verilog -sv $(DESIGN_SRCS); \
 		synth_xilinx -flatten -abc9 -nobram -arch xc7 -top $(SYNTH_TOP); \
