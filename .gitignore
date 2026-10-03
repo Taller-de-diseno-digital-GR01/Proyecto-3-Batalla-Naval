@@ -21,3 +21,6 @@ sw/.venv/
 
 #archivos lock de PDFs
 .~lock.*#
+
+# Intermedios del ensamblado (sw/ensamblar.sh). El .hex de la ROM si se versiona.
+sw/build/
