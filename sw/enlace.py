@@ -1,12 +1,16 @@
 # AQUÍ se hace la conexión con la fpga. Queda pendiente verificar que esta conexión funcione bien con mi FreeBSD porque hay una situación de drivers rara.
 # En linux funciona bien :+1:
 
+import time
+
 import serial
 from serial.tools import list_ports
 
 BAUDIOS = 115200
 VID_FTDI = 0x0403
 PID_FT2232 = 0x6010
+# El periférico guarda un solo byte y la vuelta más larga del programa a 25 MHz tarda unos 148 µs sin leer la UART, 1 ms deja margen para el jitter del USB
+ESPACIO_ENTRE_BYTES = 0.001
 
 
 class ErrorEnlace(Exception): # Custom, es para cuando NO se conecta. Probablemente lo conectemos con el make
@@ -40,3 +44,12 @@ def abrir(puerto=None, baudios=BAUDIOS):
         return serial.Serial(puerto, baudios, timeout=0)
     except serial.SerialException as error:
         raise ErrorEnlace("no se pudo abrir %s, %s" % (puerto, error))
+
+
+def mandar(puerto, trama):
+    """Manda la trama byte por byte con ESPACIO_ENTRE_BYTES de por medio, como pide el protocolo."""
+    for byte in trama:
+        puerto.write(bytes([byte]))
+        # flush espera a que el driver suelte el byte, si no el sleep corre mientras el byte todavía está en el buffer
+        puerto.flush()
+        time.sleep(ESPACIO_ENTRE_BYTES)

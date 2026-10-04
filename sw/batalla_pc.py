@@ -64,7 +64,7 @@ def tecla(puerto, juego):
     elif pulsada in ("\n", "\r"):
         trama = juego.confirmar(time.monotonic())
         if trama is not None:
-            puerto.write(trama)
+            enlace.mandar(puerto, trama)
     return True
 
 
