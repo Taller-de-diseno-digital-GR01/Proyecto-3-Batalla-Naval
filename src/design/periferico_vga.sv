@@ -139,7 +139,8 @@ module periferico_vga #(parameter WIDTH = 32) (
     end
   end
 
-  // ---------------------------------------------------------------- paleta y blanking
+  // ----------------------------------------------------------------
+  //paleta
 
   // Los cuatro primeros son los que pide el enunciado, y coinciden con los estados de casilla que el programa guarda en RAM
   logic [RGB_WIDTH-1:0] rgb;

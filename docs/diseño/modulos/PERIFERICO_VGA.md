@@ -368,11 +368,11 @@ El testbench autoverificable `src/sim/tb_periferico_vga.sv` corre los dos reloje
 real (100 MHz y 25 MHz), porque el barrido no se puede reescalar sin cambiar la temporización.
 Lleva su propio modelo de la memoria y su propia copia de la paleta, y en cada cuadro que revisa
 compara los 420 000 píxeles (color, `hsync` y `vsync`) contra lo esperado, con los 2 ciclos de
-latencia incluidos. Se corre desde `src/build/`:
+latencia incluidos. Se corre con:
 
 ```
-iverilog -g2012 -o tb_periferico_vga.vvp ../design/periferico_vga.sv ../sim/tb_periferico_vga.sv
-vvp tb_periferico_vga.vvp
+make sim TB=periferico_vga
+make synth SYNTH_TOP=periferico_vga
 ```
 
 Simula 117,6 ms (unos 7 cuadros) en cerca de 25 s. El VCD solo guarda los primeros 100 µs, porque
@@ -401,6 +401,6 @@ Para comprobar que el testbench detecta errores, se corrió también contra dos 
 dañadas a propósito. Sin `REGISTRO_RETARDO` en `hsync` fallan 5 pruebas; con un color de la paleta
 cambiado fallan 3.
 
-La síntesis genérica con yosys (la misma que hace `make synth` en el Proyecto 2) no reporta latches,
+La síntesis genérica con yosys (`make synth`) no reporta latches,
 y `synth_xilinx` mapea la memoria a `RAM128X1D` como se describe en la sección h). Queda pendiente el
 reporte de *timing* con los dos relojes, que solo se puede sacar con el `top.sv` y el MMCM.
