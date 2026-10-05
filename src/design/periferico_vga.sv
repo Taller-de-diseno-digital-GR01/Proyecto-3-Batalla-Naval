@@ -17,10 +17,10 @@ module periferico_vga #(parameter WIDTH = 32) (
   );
 
   // 640 x 480 @ 60 Hz, los numeros son los del estandar, con 25 MHz da 59,52 Hz y los monitores lo aceptan
-  localparam int H_VISIBLE = 640;
-  localparam int H_FRONT = 16;
-  localparam int H_SYNC = 96;
-  localparam int H_BACK = 48;
+  localparam int H_VISIBLE = 640; //DEfine el espacio de 640 pixeles
+  localparam int H_FRONT = 16; //Front porch - define el tiempo para terminar una línea (pintado espacios en negro)
+  localparam int H_SYNC = 96; 
+  localparam int H_BACK = 48;//Back porch - Es el tiempo donde se pinta en negro antes de iniciar una línea nueva
   localparam int H_TOTAL = H_VISIBLE + H_FRONT + H_SYNC + H_BACK; // 800
 
   localparam int V_VISIBLE = 480;
