@@ -41,7 +41,8 @@ PRJXRAY_DB_ROOT := $(PRJXRAY_DB_DIR)/artix7
 CHIPDB          := $(OPENXC7)/share/nextpnr-xilinx/chipdb/xc7a35tcpg236.bin
 XDC             := src/fpga/basys3.xdc
 
-PYTHON := python3
+APP_DIR    := sw
+PYTHON     := python3
 
 DESIGN_SRCS := $(wildcard $(DESIGN_DIR)/*.sv)
 TB_SRCS     := $(wildcard $(SIM_DIR)/tb_*.sv)
@@ -74,7 +75,7 @@ BIT        ?= $(BIT_OUT)
 # el build si src/build/ quedó con binarios de otra máquina
 TOOLCHAIN_STAMP := $(BUILD_DIR)/.toolchain
 
-.PHONY: all help list sim wave dump test synth bitstream program flash connect clean check-tb check-fpga-toolchain programa FORCE
+.PHONY: all help list sim wave dump test test-app synth bitstream program flash connect app clean check-tb check-fpga-toolchain programa FORCE
 
 # Si una receta falla, borra el archivo que estaba generando. Sin esto un paso que
 # escribe con redirección (ej. fasm2frames > top.frames) deja un archivo vacío que
@@ -90,6 +91,7 @@ help:
 	@echo "make wave TB=<modulo>  corre la simulación y abre GTKWave"
 	@echo "make dump TB=<modulo> SIGS=sig1,sig2,...  corre la simulación y exporta un SVG con vecdump"
 	@echo "make test               corre todos los testbenches, uno por uno"
+	@echo "make test-app           corre las pruebas de la app de PC con unittest, no necesita la tarjeta"
 	@echo "make programa           ensambla $(PROG_SRC) con $(ENSAMBLAR) y regenera $(PROG_HEX)"
 	@echo "make synth SYNTH_TOP=<modulo>  sintetiza con yosys (genérico) y revisa que no haya latches inferidos"
 	@echo "make bitstream          genera $(BIT_OUT) con yosys + nextpnr-xilinx + prjxray (openXC7, sin Vivado)"
@@ -100,6 +102,7 @@ help:
 	@echo "make flash              igual que program pero graba el bitstream en la flash, para que el botón PROG reconfigure"
 	@echo "                        la FPGA sin la PC. Acepta BIT= igual, y la tarjeta arranca de ahí con el jumper JP1 en QSPI"
 	@echo "make connect             verifica que la Basys3 esté detectable por USB/JTAG antes de programar"
+	@echo "make app                 corre la app de PC (terminal remota del Jugador 2 por UART)"
 	@echo "make clean"
 	@echo ""
 	@echo "Testbenches disponibles, $(TBS)"
@@ -316,6 +319,10 @@ program: $(PROGRAM_DEPS)
 flash: $(PROGRAM_DEPS)
 	$(PRIV) $(OPENFPGALOADER) -b $(BOARD) -f $(BIT)
 
+# Terminal interactiva, busca la tarjeta sola si no se pasa PUERTO
+app:
+	$(PYTHON) $(APP_DIR)/batalla_pc.py $(if $(PUERTO),-p $(PUERTO))
+
 test: check-tb # <-- Esto corre make sim para cada testbench en $(TBS), uno por uno
 	@estado=0; \
 	for modulo in $(TBS); do \
@@ -323,6 +330,10 @@ test: check-tb # <-- Esto corre make sim para cada testbench en $(TBS), uno por 
 		$(MAKE) --no-print-directory sim TB=$$modulo || estado=1; \
 	done; \
 	exit $$estado
+
+# -t $(APP_DIR) es lo que deja importar los modulos sin paquete, igual que cuando corre la app
+test-app:
+	$(PYTHON) -m unittest discover -s $(APP_DIR)/pruebas -t $(APP_DIR)
 
 clean:
 	rm -rf $(BUILD_DIR)
