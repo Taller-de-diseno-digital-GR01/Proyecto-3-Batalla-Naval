@@ -3,7 +3,9 @@ SIM_DIR    := src/sim
 BUILD_DIR  := src/build
 
 IVERILOG       := iverilog
-IVERILOG_FLAGS := -g2012
+# -I para los `include "config.sv" y "constants.sv" del núcleo RISC-V. yosys los busca solo
+# en la carpeta del archivo que los incluye, iverilog no
+IVERILOG_FLAGS := -g2012 -I $(DESIGN_DIR)
 VVP            := vvp
 GTKWAVE        := gtkwave
 VECDUMP        := vecdump # Programa para pasar de .vcd a .svg
@@ -49,10 +51,15 @@ TBS         := $(patsubst $(SIM_DIR)/tb_%.sv,%,$(TB_SRCS))
 TB ?= $(firstword $(TBS))
 SYNTH_TOP ?= top
 
+# Programa en ensamblador que carga la ROM con $readmemh. ensamblar.sh usa binutils de GNU
+# para RISC-V (riscv64-unknown-elf-*), que solo hacen falta para volver a ensamblar.
+PROG_SRC  := sw/programa.s
+PROG_HEX  := sw/programa.hex
+ENSAMBLAR := sw/ensamblar.sh
+
 VVP_OUT := $(BUILD_DIR)/tb_$(TB).vvp
 VCD_OUT := $(BUILD_DIR)/tb_$(TB).vcd
-SVG_OUT := $(or $(SVG),$(BUILD_DIR)/tb_$(TB).svg)
-RECORTE_OUT := $(BUILD_DIR)/tb_$(TB)_recorte.vcd
+SVG_OUT := $(BUILD_DIR)/tb_$(TB).svg
 
 NETLIST_OUT := $(BUILD_DIR)/$(SYNTH_TOP)_synth.v
 SYNTH_LOG   := $(BUILD_DIR)/$(SYNTH_TOP)_synth.log
@@ -68,32 +75,34 @@ BIT        ?= $(BIT_OUT)
 # el build si src/build/ quedó con binarios de otra máquina
 TOOLCHAIN_STAMP := $(BUILD_DIR)/.toolchain
 
-.PHONY: all help list sim wave dump test test-app synth bitstream program connect app clean check-tb check-fpga-toolchain FORCE
+.PHONY: all help list sim wave dump test test-app synth bitstream program flash connect app clean check-tb check-fpga-toolchain programa FORCE
 
 # Si una receta falla, borra el archivo que estaba generando. Sin esto un paso que
 # escribe con redirección (ej. fasm2frames > top.frames) deja un archivo vacío que
 # make da por hecho la próxima vez, y el .bit sale en blanco sin avisar.
 .DELETE_ON_ERROR:
 
-all: bitstream program app
+all: bitstream program
 
 help:
-	@echo "make all                genera el bitstream, lo carga a la FPGA, y abre la app de PC (bitstream + program + app)"
+	@echo "make all                genera el bitstream y lo carga a la FPGA (bitstream + program)"
 	@echo "make list              lista los testbenches disponibles"
 	@echo "make sim  TB=<modulo>  compila y corre src/sim/tb_<modulo>.sv"
 	@echo "make wave TB=<modulo>  corre la simulación y abre GTKWave"
 	@echo "make dump TB=<modulo> SIGS=sig1,sig2,...  corre la simulación y exporta un SVG con vecdump"
-	@echo "                        DESDE=/HASTA= recortan la ventana (unidades del timescale), SVG= cambia la salida"
-	@echo "make test"
+	@echo "make test               corre todos los testbenches, uno por uno"
 	@echo "make test-app           corre las pruebas de la app de PC con unittest, no necesita la tarjeta"
+	@echo "make programa           ensambla $(PROG_SRC) con $(ENSAMBLAR) y regenera $(PROG_HEX)"
 	@echo "make synth SYNTH_TOP=<modulo>  sintetiza con yosys (genérico) y revisa que no haya latches inferidos"
 	@echo "make bitstream          genera $(BIT_OUT) con yosys + nextpnr-xilinx + prjxray (openXC7, sin Vivado)"
 	@echo "                        toma el toolchain de OPENXC7=$(OPENXC7) y PRJXRAY_PY=$(PRJXRAY_PY), no hace falta"
 	@echo "                        correr 'source .../export.sh' antes"
 	@echo "make program            reconstruye el bitstream si hace falta y lo carga al Basys3 con openFPGALoader"
 	@echo "make program BIT=<archivo.bit>  carga ese .bit tal cual, sin reconstruir nada"
+	@echo "make flash              igual que program pero graba el bitstream en la flash, para que el botón PROG reconfigure"
+	@echo "                        la FPGA sin la PC. Acepta BIT= igual, y la tarjeta arranca de ahí con el jumper JP1 en QSPI"
 	@echo "make connect             verifica que la Basys3 esté detectable por USB/JTAG antes de programar"
-	@echo "make app                 corre la app de PC del Jugador 2 (Batalla Naval por UART)"
+	@echo "make app                 corre la app de PC (terminal remota del Jugador 2 por UART)"
 	@echo "make clean"
 	@echo ""
 	@echo "Testbenches disponibles, $(TBS)"
@@ -136,27 +145,28 @@ wave: sim
 
 dump: sim
 ifeq ($(strip $(SIGS)),)
-	$(error Uso, make dump TB=<modulo> SIGS=sig1,sig2,...  ej. make dump TB=periferico_vga SIGS=clk_pix_tb,hsync_tb,vsync_tb)
+	$(error Uso, make dump TB=<modulo> SIGS=sig1,sig2,...  ej. make dump TB=marcador SIGS=clk,rst,o_an)
 endif
-ifneq ($(strip $(DESDE)$(HASTA)),)
-	$(PYTHON) $(SIM_DIR)/recortar_vcd.py $(VCD_OUT) $(RECORTE_OUT) $(or $(DESDE),0) $(or $(HASTA),999999999999999999)
-	$(VECDUMP) $(RECORTE_OUT) -s $(SIGS) -o $(SVG_OUT)
-else
 	$(VECDUMP) $(VCD_OUT) -s $(SIGS) -o $(SVG_OUT)
-endif
-	@awk 'NR==1{print; print "<rect width=\"100%\" height=\"100%\" fill=\"#fff\"/>"; next} 1' $(SVG_OUT) > $(SVG_OUT).tmp && mv $(SVG_OUT).tmp $(SVG_OUT)
 	@echo ".svg generado en $(SVG_OUT)"
 
 # Ej:
-# make dump TB=periferico_vga SIGS=clk_pix_tb,rst_tb,hsync_tb,vsync_tb
+# make dump TB=marcador SIGS=clk,rst,o_an
 # Hay que conocer las señales que se quieren ver, eso es lo único malo.
-# vecdump dibuja la simulación entera; para ver solo un tramo se recorta el VCD con
-# DESDE/HASTA, en unidades del timescale del VCD (ps con Icarus), y SVG= cambia la salida:
-# make dump TB=periferico_vga SIGS=clk_pix_tb,hsync_tb DESDE=0 HASTA=40000000 SVG=docs/informe/img/hsync.svg
-# vecdump deja el fondo transparente y en el modo oscuro de GitHub no se ven las líneas negras,
-# por eso el awk le mete un rectángulo blanco justo después de la etiqueta <svg>.
 
-$(NETLIST_OUT): $(DESIGN_SRCS) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
+# programa.hex va versionado, así que esta regla no depende de programa.s y solo corre si
+# el .hex falta. Si dependiera del .s, después de un clone o un checkout las fechas de los
+# dos archivos quedan en cualquier orden y make intentaría ensamblar en una máquina sin
+# binutils de RISC-V. Para volver a ensamblar después de cambiar el programa: make programa
+$(PROG_HEX):
+	bash $(ENSAMBLAR) $(PROG_SRC)
+
+programa:
+	bash $(ENSAMBLAR) $(PROG_SRC)
+
+# $(PROG_HEX) está en los prerrequisitos de la síntesis porque la ROM lo lee con $readmemh:
+# si falta se genera, y si cambia se vuelve a sintetizar
+$(NETLIST_OUT): $(DESIGN_SRCS) $(PROG_HEX) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
 	@$(YOSYS) -p " \
 		read_verilog -sv $(DESIGN_SRCS); \
 		hierarchy -check -top $(SYNTH_TOP); \
@@ -181,7 +191,7 @@ $(NETLIST_OUT): $(DESIGN_SRCS) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
 	tail -n +$$stat_line $(SYNTH_LOG)
 
 # Nota: SYNTH_TOP debe ser un módulo instanciable de verdad (ej. top, o cualquier
-# módulo hoja como periferico_vga). No sirve para testbenches (tb_*.sv no está en DESIGN_SRCS).
+# módulo hoja como marcador). No sirve para testbenches (tb_*.sv no está en DESIGN_SRCS).
 synth: $(NETLIST_OUT)
 	@echo "Netlist generado en $(NETLIST_OUT)"
 
@@ -195,10 +205,8 @@ check-fpga-toolchain:
 		{ echo "ERROR: '$(NEXTPNR_XILINX)' no encontrado. Revisar que OPENXC7=$(OPENXC7) sea la ruta correcta."; exit 1; }
 	@command -v $(XC7FRAMES2BIT) >/dev/null 2>&1 || \
 		{ echo "ERROR: '$(XC7FRAMES2BIT)' no encontrado. Revisar que OPENXC7=$(OPENXC7) sea la ruta correcta."; exit 1; }
-	@[ -f $(XDC) ] || \
-		{ echo "ERROR: falta $(XDC), sin las restricciones de pines no se puede rutear."; exit 1; }
 	@[ -f $(CHIPDB) ] || \
-		{ echo "ERROR: chipdb no encontrado en $(CHIPDB) (revisar la instalación de openXC7)"; exit 1; }
+		{ echo "ERROR: chipdb no encontrado en $(CHIPDB)"; exit 1; }
 	@[ -d $(PRJXRAY_DB_ROOT)/$(PART) ] || \
 		{ echo "ERROR: base de datos de prjxray no encontrada en $(PRJXRAY_DB_ROOT)/$(PART)"; exit 1; }
 	@$(PYTHON) -c "import fasm, prjxray" 2>/dev/null || \
@@ -210,7 +218,7 @@ check-fpga-toolchain:
 
 # Bitstream para el Basys3 (XC7A35T, part $(PART)) con el toolchain openXC7 (yosys ->
 # nextpnr-xilinx -> fasm2frames -> xc7frames2bit), sin Vivado. Ver src/fpga/basys3.xdc.
-$(JSON_OUT): $(DESIGN_SRCS) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
+$(JSON_OUT): $(DESIGN_SRCS) $(PROG_HEX) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
 	$(YOSYS) -p " \
 		read_verilog -sv $(DESIGN_SRCS); \
 		synth_xilinx -flatten -abc9 -nobram -arch xc7 -top $(SYNTH_TOP); \
@@ -307,14 +315,13 @@ endif
 program: $(PROGRAM_DEPS)
 	$(PRIV) $(OPENFPGALOADER) -b $(BOARD) $(BIT)
 
-# Terminal interactiva, busca la tarjeta sola si no se pasa PUERTO. El nombre del script
-# todavía no está definido, se cambia aquí o con make app APP_MAIN=<archivo>
-APP_MAIN ?= $(APP_DIR)/batalla_naval_pc.py
+# make program deja el diseño solo en la SRAM de la FPGA y PROG lo borra, y como el reinicio general del proyecto es PROG el bitstream tiene que estar en la flash
+flash: $(PROGRAM_DEPS)
+	$(PRIV) $(OPENFPGALOADER) -b $(BOARD) -f $(BIT)
 
+# Terminal interactiva, busca la tarjeta sola si no se pasa PUERTO
 app:
-	@[ -f $(APP_MAIN) ] || \
-		{ echo "ERROR: no existe $(APP_MAIN). Se puede indicar otro con make app APP_MAIN=<archivo>"; exit 1; }
-	$(PYTHON) $(APP_MAIN) $(if $(PUERTO),-p $(PUERTO))
+	$(PYTHON) $(APP_DIR)/batalla_pc.py $(if $(PUERTO),-p $(PUERTO))
 
 test: check-tb # <-- Esto corre make sim para cada testbench en $(TBS), uno por uno
 	@estado=0; \
@@ -326,8 +333,6 @@ test: check-tb # <-- Esto corre make sim para cada testbench en $(TBS), uno por 
 
 # -t $(APP_DIR) es lo que deja importar los modulos sin paquete, igual que cuando corre la app
 test-app:
-	@[ -d $(APP_DIR)/pruebas ] || \
-		{ echo "ERROR: no existe $(APP_DIR)/pruebas, la app de PC todavía no tiene pruebas."; exit 1; }
 	$(PYTHON) -m unittest discover -s $(APP_DIR)/pruebas -t $(APP_DIR)
 
 clean:
