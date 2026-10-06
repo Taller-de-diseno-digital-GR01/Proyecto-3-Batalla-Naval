@@ -1,7 +1,8 @@
 # PERIFERICO_VGA
 
-> **Estado:** propuesta de diseño. La rama `feature/VGA` todavía no contiene RTL; los nombres de
-> señales y bloques de esta ficha son los que se usarán al implementarlo.
+> **Estado:** implementado en `src/design/periferico_vga.sv` y verificado con
+> `src/sim/tb_periferico_vga.sv` (26 pruebas, ver Verificación). Todavía no está instanciado en un
+> `top.sv`.
 
 ## a) Nombre del módulo
 
@@ -11,7 +12,7 @@ PERIFERICO_VGA
 
 ```mermaid
 flowchart LR
-    IN_BUS(["write_enable_i, addr_i[8:0], wdata_i[31:0]<br/>(del controlador de mapeo)"]) --> MEM["MEMORIA_VIDEO<br/>BRAM doble puerto 512 × 32"]
+    IN_BUS(["write_enable_i, addr_i[8:0], wdata_i[31:0]<br/>(del controlador de mapeo)"]) --> MEM["MEMORIA_VIDEO<br/>RAM distribuida doble puerto 512 × 32"]
     MEM --> OUT_RD(["rdata_o[31:0]<br/>(a MUX_LECTURA)"])
 
     IN_PIX(["clk_pix_i 25 MHz<br/>(del MMCM)"]) --> SYNC["GENERADOR_SINCRONISMOS<br/>contadores H/V + comparadores"]
@@ -41,8 +42,11 @@ el programa escribió en su palabra, 60 veces por segundo, y nada más.
 
 ## d) Entradas
 
-- `clk_i`, reloj del sistema de 100 MHz. Sincroniza el puerto del CPU.
+- `clk_i`, reloj del sistema, el mismo del procesador. Sincroniza las escrituras del CPU. El
+  periférico no depende de su frecuencia.
 - `rst_i`, reinicio del sistema. Solo reinicia la lógica de barrido; no borra la memoria de video.
+  Tiene que durar al menos dos periodos de `clk_pix_i` (80 ns) para que el sincronizador lo vea;
+  el reinicio del botón y el `locked` del MMCM duran mucho más que eso.
 - `clk_pix_i`, reloj de píxel de 25 MHz, desde el MMCM del top.
 - `write_enable_i`, habilitación de escritura, desde el controlador de mapeo (`we_o && sel_vga`).
 - `addr_i[8:0]`, índice de palabra, desde el controlador de mapeo (`DataAddress_o[10:2]`).
@@ -132,7 +136,13 @@ ignora.
 | `111` | Indicador de turno Jugador 2 | `0xF0F` |
 
 Los cuatro primeros son los que exige el enunciado. Los colores concretos pueden ajustarse al
-probar en el monitor sin cambiar nada más del diseño.
+probar en el monitor sin cambiar nada más del diseño, salvo la copia de la paleta que tiene el
+testbench.
+
+Los códigos `000` a `011` coinciden con los estados de casilla que el programa guarda en RAM (bits
+`[1:0]`, ver [`nivel03.md`](../diagramas/nivel03.md)), y el programa pinta el tablero propio
+copiando ese estado tal cual. Si se cambia el orden de esos cuatro códigos, hay que cambiar también
+la codificación del tablero en RAM.
 
 ### Temporización 640 × 480 @ 60 Hz
 
@@ -198,20 +208,35 @@ también con desplazamientos, porque `rv32i` no tiene `mul`.
 
 ### Memoria de doble puerto y cruce de dominios
 
-`MEMORIA_VIDEO` es una BRAM de doble puerto verdadero de 512 × 32 bits, que Vivado infiere a
-partir de un arreglo `logic [31:0] mem [0:511]` accedido desde dos `always_ff` con relojes
-distintos:
+`MEMORIA_VIDEO` es un arreglo `logic [31:0] memoria_video [0:511]` con un puerto de escritura y
+dos de lectura:
 
 | Puerto | Reloj | Acceso | Señales |
 |---|---|---|---|
-| A | `clk_i` | lectura y escritura | `write_enable_i`, `addr_i`, `wdata_i`, `rdata_o` |
-| B | `clk_pix_i` | solo lectura | `indice_pix`, `color` |
+| A | `clk_i` | escritura síncrona, lectura combinacional | `write_enable_i`, `addr_i`, `wdata_i`, `rdata_o` |
+| B | `clk_pix_i` | solo lectura, registrada en `color` | `indice_pix`, `color` |
 
-El arreglo de la BRAM es el único punto donde se cruzan los dominios. No hay señales de control
-que crucen de un reloj al otro, así que no hacen falta sincronizadores para los datos. Si el
-barrido lee una casilla en el mismo ciclo en que el CPU la escribe, esa casilla puede verse
-incorrecta durante un solo cuadro. No afecta al juego, porque el estado de los tableros vive en
-la RAM de datos y la memoria de video es solo su representación.
+El puerto A se lee de forma combinacional porque así lee el núcleo su RAM de datos. El procesador
+es el núcleo de ciclo único de riscv-simple-sv, cuya memoria de ejemplo (`example_data_memory`)
+hace `assign q = mem[address]`: un `lw` presenta la dirección y espera el dato en el mismo ciclo.
+Una BRAM no puede hacer eso, porque su lectura siempre pasa por un registro, así que la memoria de
+video se implementa como **RAM distribuida** (LUTRAM). El puerto B lee la misma memoria de forma
+combinacional y registra el resultado con `clk_pix_i`. Ese registro es lo que lo deja sincronizado
+al reloj de píxel, como pide la sección 4.5.1.
+
+Con `synth_xilinx` de yosys la memoria queda en 128 primitivas `RAM128X1D`, que ocupan 512 LUT de
+tipo SLICEM, cerca del 2,5 % de las 20 800 LUT de la XC7A35T. Cada `RAM128X1D` trae un puerto de
+lectura y escritura y uno de solo lectura, que son justo los dos puertos del diseño. La memoria
+arranca en ceros (agua en toda la pantalla) porque el arreglo tiene valor inicial, que en la FPGA
+se carga con la configuración.
+
+La memoria es el único punto donde se cruzan los dominios. No hay señales de control que crucen
+de un reloj al otro, así que no hacen falta sincronizadores para los datos. Si el barrido lee una
+casilla justo cuando el CPU la escribe, los píxeles leídos en ese instante pueden salir con un
+color equivocado durante un solo cuadro. No afecta al juego, porque el estado de los tableros vive
+en la RAM de datos y la memoria de video es solo su representación. Por la misma razón, si al
+cerrar *timing* el camino de la escritura en `clk_i` al registro `color` en `clk_pix_i` falla por
+la relación entre las dos frecuencias, se puede declarar como falso camino.
 
 La única señal que cruza de dominio es el reinicio. `rst_i` pasa por un `SINCRONIZADOR_RESET` de
 dos *flip-flops* en `clk_pix_i` y sale como `rst_pix`, que reinicia los contadores del barrido.
@@ -224,7 +249,7 @@ lo mismo para que lleguen alineadas con su color:
 | Ciclo de `clk_pix_i` | Camino de color | Camino de control |
 |---|---|---|
 | t | contadores → `indice_pix` | contadores → `hsync_n`, `vsync_n`, `video_on` |
-| t + 1 | BRAM entrega `color` → paleta → *blanking* | `REGISTRO_RETARDO` entrega `*_d` |
+| t + 1 | el registro del puerto B entrega `color` → paleta → *blanking* | `REGISTRO_RETARDO` entrega `*_d` |
 | t + 2 | `REGISTRO_SALIDA` → `vga_r/g/b_o` | `REGISTRO_SALIDA` → `vga_hsync_o`, `vga_vsync_o` |
 
 Los dos caminos tienen la misma latencia de 2 ciclos. Sin `REGISTRO_RETARDO` la imagen quedaría
@@ -233,17 +258,18 @@ de la paleta y el multiplexor lleguen a los pines.
 
 ### Lectura desde el CPU
 
-`rdata_o` sale del puerto A. La lectura de la BRAM es síncrona, así que el dato está disponible
-un ciclo después de presentar la dirección, igual que en la RAM de datos. En un procesador
-uniciclo el `lw` necesita el dato en el mismo ciclo, y ese problema se resolverá con el mismo
-mecanismo para la RAM y el VGA al integrar el procesador. Mientras tanto, el programa mantiene el
-estado de los tableros en RAM y no depende de leer la memoria de video.
+`rdata_o` sale del puerto A sin pasar por ningún registro: cambia en cuanto cambia `addr_i`. Un
+`lw` a la memoria de video funciona igual que uno a la RAM de datos y recibe la palabra completa,
+con los bits reservados. Aun así, el programa mantiene el estado de los tableros en RAM y no
+depende de leer la memoria de video.
 
 ### Latches
 
 La paleta, el cálculo del índice, los comparadores y el *blanking* son `always_comb` o `assign`
 con todas sus salidas asignadas en cada camino (la paleta con un `case` completo de 8 entradas).
-Los contadores y registros están en `always_ff` con reinicio síncrono.
+Los contadores y los registros de retardo y salida están en `always_ff` con reinicio síncrono por
+`rst_pix`; el registro `color` y los del sincronizador no lo necesitan. La síntesis con yosys no
+reporta ningún `Latch inferred`.
 
 ---
 
@@ -251,7 +277,7 @@ Los contadores y registros están en `always_ff` con reinicio síncrono.
 
 ```mermaid
 flowchart LR
-    WE(["write_enable_i"]) -.-> MEM["BRAM 512 × 32<br/>puerto A: clk_i<br/>puerto B: clk_pix_i"]
+    WE(["write_enable_i"]) -.-> MEM["RAM distribuida 512 × 32<br/>puerto A: escritura clk_i, lectura comb.<br/>puerto B: lectura comb."]
     ADDR(["addr_i[8:0]"]) --> MEM
     WDATA(["wdata_i[31:0]"]) --> MEM
     MEM -->|"puerto A"| OUT_RD(["rdata_o[31:0]"])
@@ -281,7 +307,8 @@ flowchart LR
     NOT_H -.->|"hsync_n"| REG_RET
     NOT_V -.->|"vsync_n"| REG_RET
 
-    MEM -->|"puerto B, color[2:0]"| MUX_PAL{{"MUX 8 a 1<br/>constantes RGB444"}}
+    MEM -->|"puerto B, bits [2:0]"| REG_COL["REG color<br/>3 bits"]
+    REG_COL -->|"color[2:0]"| MUX_PAL{{"MUX 8 a 1<br/>constantes RGB444"}}
     MUX_PAL -->|"rgb[11:0]"| MUX_BLK{{"MUX 2 a 1<br/>rgb / 12'h000"}}
     REG_RET -.->|"video_on_d"| MUX_BLK
     MUX_BLK -->|"rgb_pix[11:0]"| REG_OUT["REG salida<br/>14 bits"]
@@ -292,8 +319,8 @@ flowchart LR
 ```
 
 Las líneas continuas llevan datos y las punteadas llevan control. `clk_pix_i` entra a los dos
-*flip-flops* del sincronizador, a los contadores, a los registros y al puerto B de la BRAM; `clk_i`
-entra al puerto A. No se dibujan para mantener legible el diagrama. Los comparadores contra
+*flip-flops* del sincronizador, a los contadores y a los registros de color, retardo y salida;
+`clk_i` entra a la escritura del puerto A. No se dibujan para mantener legible el diagrama. Los comparadores contra
 constantes no se dibujan por compuertas; en la FPGA son árboles de LUT.
 
 ---
@@ -330,27 +357,4 @@ Conexiones propuestas en `src/design/top.sv`, instancia `u_periferico_vga`:
 - `vga_r_o`, `vga_g_o`, `vga_b_o`, `vga_hsync_o`, `vga_vsync_o`, a los puertos del top con el
   mismo nombre.
 
-Igual que en los demás módulos, el diagrama por chips que pide el método no aplica a un diseño
-que se sintetiza dentro de una sola FPGA, y esta lista de puertos es el reemplazo propuesto.
 
----
-
-## Verificación (plan)
-
-Se propone un testbench autoverificable `src/sim/tb_periferico_vga.sv`, con los dos relojes a sus
-frecuencias reales (100 MHz y 25 MHz), que compruebe:
-
-- Después del reinicio, `h_count` y `v_count` arrancan en 0.
-- Una línea dura 800 ciclos de `clk_pix_i` y un cuadro 800 × 525.
-- `vga_hsync_o` está en bajo exactamente 96 ciclos por línea, empezando en el píxel 656 más los 2
-  ciclos de latencia; `vga_vsync_o` está en bajo exactamente 2 líneas por cuadro, empezando en la
-  línea 490.
-- Fuera del área visible `vga_r_o`, `vga_g_o` y `vga_b_o` valen 0.
-- Una palabra escrita por el puerto A con `color = 010` en la casilla (fila 3, col 5) aparece como
-  `0xF00` exactamente en los píxeles `h = 160…191`, `v = 96…127`, y en ningún otro.
-- Una escritura con `write_enable_i = 0` no modifica la memoria.
-- Una palabra escrita se lee de vuelta completa por `rdata_o`, incluidos los bits reservados.
-- Los 8 códigos de color producen los 8 valores de la paleta.
-
-Además, `make synth` debe pasar sin `Latch inferred` para `periferico_vga`, y el reporte de
-*timing* debe cerrar en los dos dominios de reloj.

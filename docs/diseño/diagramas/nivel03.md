@@ -1,7 +1,5 @@
 
 
-# Nivel 3
-
 ## Diagrama de tercer nivel
 
 ```mermaid
@@ -10,26 +8,32 @@ flowchart TD
     ROM["ROM de programa"]
     RAM["RAM de datos"]
 
-    subgraph MAP["CONTROLADOR_MAPEO"]
-        AT["ADDRESS_TRANSLATOR<br/>compara DataAddress_o con el mapa"]
+    subgraph MAP["CONTROLADOR_MAPEO - propuesta"]
+        DIR["Decodificación de rangos"]
+        CMP_UART["Comparador UART<br/>0x0001_0040-0x0001_004F"]
+        AND_WE["Habilitación de escritura UART<br/>we_o y sel_uart"]
+        CMP_VGA["Comparador VGA<br/>0x0001_1000-0x0001_17FF"]
+        AND_WE_VGA["Habilitación de escritura VGA<br/>we_o y sel_vga"]
         RMUX["MUX_LECTURA"]
-        AT -->|"mux_sel[2:0]"| RMUX
+        DIR --> CMP_UART
+        CMP_UART -->|"sel_uart"| AND_WE
+        DIR --> CMP_VGA
+        CMP_VGA -->|"sel_vga"| AND_WE_VGA
+        DIR -->|"selección del destino"| RMUX
     end
 
-    subgraph GPIO["PERIFERICO_ENTRADAS"]
-        BTNREG["REG_ESTADO<br/>7 bits, botones_i[6:0]"]
-        MUX_BTN["MUX_RD<br/>rdata_o"]
-        BTNREG --> MUX_BTN
+    subgraph GPIO["ENTRADAS - propuesta"]
+        SYNC["Sincronización"] --> DB["Filtro de rebotes"] --> BTNREG["Registro de botones"]
     end
 
-    subgraph PUART["PERIFERICO_UART"]
-        DEC_UART["DECOD_DIR<br/>addr_i vs 00 / 01 / 10"]
-        REG_CTRL["REG_CONTROL<br/>[0] send, [1] new_rx"]
-        REG_TX["REG_DATOS_TX<br/>8 bits"]
-        REG_RX["REG_DATOS_RX<br/>8 bits"]
-        MUX_UART["MUX_RD<br/>rdata_o"]
-        TX["NUCLEO_UART_TX<br/>uart_tx, TICKS_BIT = 868"]
-        RX["NUCLEO_UART_RX<br/>uart_rx, TICKS_X16 = 54"]
+    subgraph PUART["PERIFERICO_UART - feature/uart"]
+        DEC_UART["Selección de registro<br/>addr_i"]
+        REG_CTRL["reg_control<br/>send, new_rx"]
+        REG_TX["reg_tx"]
+        REG_RX["reg_rx"]
+        MUX_UART["MUX de lectura<br/>rdata_o"]
+        TX["uart_tx"]
+        RX["uart_rx"]
         DEC_UART --> REG_CTRL
         DEC_UART --> REG_TX
         DEC_UART --> REG_RX
@@ -46,310 +50,67 @@ flowchart TD
     VGA["PERIFERICO_VGA<br/>detalle en la sección VGA"]
     MON["Monitor VGA"]
 
-    subgraph P7["PERIFERICO_7SEG"]
-        DEC_7["DECOD_DIR<br/>addr_i == 00"]
-        DREG["REG_DIGITOS<br/>4 dígitos BCD y 4 puntos"]
-        MUX_7["MUX_RD<br/>rdata_o"]
-        MARC["MARCADOR<br/>barrido de 4 dígitos"]
-        DEC_7 --> DREG
-        DREG --> MUX_7
-        DREG -->|"i_digitos, i_puntos"| MARC
+    subgraph DISP["DISPLAY Y LED - propuesta"]
+        DREG["Registro de datos"] --> SCAN["Selector y decodificador"]
     end
 
-    subgraph PLED["PERIFERICO_LED"]
-        DEC_LED["DECOD_DIR<br/>addr_i == 00"]
-        LREG["REG_LEDS<br/>un bit por fase"]
-        MUX_LED["MUX_RD<br/>rdata_o"]
-        DEC_LED --> LREG
-        LREG --> MUX_LED
-    end
-
-    subgraph BUZ["PERIFERICO_BUZZER"]
-        DEC_BUZ["DECOD_DIR<br/>addr_i == 00"]
-        BREG["REG_SONIDO<br/>código de 3 bits"]
-        MUX_BUZ["MUX_RD<br/>rdata_o"]
-        SEQ["SECUENCIADOR_MELODIA<br/>ROM_MELODIAS y ROM_NOTAS"]
-        TONE["GENERADOR_TONO<br/>divisor de 18 bits"]
-        DEC_BUZ --> BREG
-        DEC_BUZ -->|"i_iniciar"| SEQ
-        BREG -->|"i_sonido"| SEQ
-        SEQ -->|"o_fin"| BREG
-        SEQ -->|"o_n, o_sonar"| TONE
-        BREG --> MUX_BUZ
+    subgraph BUZ["BUZZER - propuesta"]
+        BREG["Registro de evento"] --> TONE["Generador de tono"]
     end
 
     CPU -->|"ProgAddress_o"| ROM
     ROM -->|"ProgIn_i"| CPU
-    CPU -->|"DataAddress_o, we_o"| AT
+    CPU -->|"DataAddress_o, DataOut_o, we_o"| DIR
     RMUX -->|"DataIn_i"| CPU
-    AT -->|"ram_we"| RAM
+    DIR --> RAM
     RAM --> RMUX
-    AT -->|"gpio_we = 0, no se usa"| GPIO
-    BTNS["Botones del Jugador 1"] -->|"botones_i"| BTNREG
-    MUX_BTN -->|"rdata_o"| RMUX
-    AT -->|"uart_we como write_enable_i"| DEC_UART
-    CPU -->|"addr_i = DataAddress_o[3:2]<br/>wdata_i = DataOut_o"| DEC_UART
+    DIR --> BTNREG
+    BTNREG --> RMUX
+    DIR -->|"we_o"| AND_WE
+    DIR -->|"addr_i = DataAddress_o[3:2]<br/>wdata_i = DataOut_o"| DEC_UART
+    AND_WE -->|"write_enable_i"| DEC_UART
     MUX_UART -->|"rdata_o"| RMUX
-    AT -->|"vga_we como write_enable_i"| VGA
-    CPU -->|"addr_i = DataAddress_o[10:2]<br/>wdata_i = DataOut_o"| VGA
+    DIR -->|"we_o"| AND_WE_VGA
+    DIR -->|"addr_i = DataAddress_o[10:2]<br/>wdata_i = DataOut_o"| VGA
+    AND_WE_VGA -->|"write_enable_i"| VGA
     VGA -->|"rdata_o"| RMUX
     VGA -->|"vga_hsync_o, vga_vsync_o<br/>vga_r_o, vga_g_o, vga_b_o"| MON
-    AT -->|"display_we como write_enable_i"| DEC_7
-    AT -->|"led_we como write_enable_i"| DEC_LED
-    AT -->|"buzzer_we como write_enable_i"| DEC_BUZ
-    MUX_7 -->|"rdata_o"| RMUX
-    MUX_LED -->|"rdata_o"| RMUX
-    MUX_BUZ -->|"rdata_o"| RMUX
-    MARC -->|"seg_o, an_o, dp_o"| D7["Display de 7 segmentos"]
-    LREG -->|"leds_o"| LEDS["LD0 a LD2"]
-    TONE -->|"buzzer_o"| ZUMB["Buzzer"]
+    DIR --> DREG
+    DIR --> BREG
     APP["Aplicación de PC"] -->|"rx_i"| RX
     TX -->|"tx_o"| APP
 ```
 
-El procesador aparece como **un solo bloque**, sin mostrar sus partes internas. ROM y RAM son bloques separados: ROM entrega instrucciones directamente al procesador y RAM comparte el camino de datos con los periféricos. Dentro de `CONTROLADOR_MAPEO` están el Address Translator y el multiplexor de lectura. El AT solo recibe `DataAddress_o` y `we_o`, así que `DataOut_o` y los `addr_i` salen del procesador directo hacia cada destino, como dice [`Address_Translator.md`](../modulos/Address_Translator.md). A entradas, displays, LED y buzzer les llega `wdata_i = DataOut_o` y `addr_i` fijo en `2'b00`, que no se dibujan. Los bloques internos de los cinco periféricos de registros salen de su RTL, `periferico_uart.sv`, `periferico_entradas.sv`, `periferico_7seg.sv`, `periferico_led.sv` y `periferico_buzzer.sv`, con sus submódulos. Todavía no tienen RTL el procesador, la ROM, la RAM, el controlador de mapeo, el VGA ni el `top.sv` que los junta, así que las flechas que van de un bloque a otro son las conexiones que ese top tiene que hacer. `clk_i` y `rst_i` llegan a todos los periféricos, aunque no se repitan en cada registro del dibujo.
+El procesador aparece como **un solo bloque**, sin mostrar sus partes internas. ROM y RAM son bloques separados: ROM entrega instrucciones directamente al procesador y RAM comparte el camino de datos con los periféricos. Dentro de `CONTROLADOR_MAPEO` se muestran la decodificación, el comparador de UART, la habilitación de escritura y el multiplexor de lectura; son **conexiones propuestas**, aún sin RTL de integración. Los registros y núcleos UART sí corresponden al código de `feature/uart`. `clk_i` y `rst_i` llegan al periférico UART, aunque no se repitan en cada registro del dibujo.
 
 ## Observaciones de integración
 
-- **Entradas.** Los botones se registran y se exponen en un solo registro de lectura, sin antirrebote en hardware. El programa saca los flancos y decide cómo usar cada pulsación. El detalle está en [`PERIFERICO_ENTRADAS.md`](../modulos/PERIFERICO_ENTRADAS.md).
-- **Displays.** `REG_DIGITOS` guarda cuatro dígitos BCD y cuatro puntos decimales, el Jugador 1 en `AN3` y `AN2` y el Jugador 2 en `AN1` y `AN0`. El programa lleva los contadores en BCD y `marcador` hace el barrido. El detalle está en [`PERIFERICO_7SEG.md`](../modulos/PERIFERICO_7SEG.md).
-- **LED.** `REG_LEDS` tiene un bit por fase, LD0 colocación, LD1 batalla y LD2 resultado, y el programa escribe `0x1`, `0x2` o `0x4`. El detalle está en [`PERIFERICO_LED.md`](../modulos/PERIFERICO_LED.md).
-- **Buzzer.** `REG_SONIDO` recibe el código de una de las cinco melodías, `secuenciador_melodia` la recorre y `generador_tono` saca la onda. El programa decide qué evento ocurrió y qué código escribir. El detalle está en [`PERIFERICO_BUZZER.md`](../modulos/PERIFERICO_BUZZER.md).
+- **Entradas.** Se propone sincronizar y filtrar los botones antes de exponer su estado en un registro. El programa decide cómo usar cada pulsación.
+- **Display y LED.** Se proponen registros mapeados para el contador de victorias y la fase del juego, más un selector de dígito y un decodificador de segmentos. La distribución concreta de bits sigue pendiente.
+- **Buzzer.** Se propone un registro para seleccionar el evento y un generador de tono. El programa determina qué evento ocurrió.
 - **Aplicación de PC.** Envía y recibe bytes por UART; la interpretación de colocaciones, turnos y disparos corresponde al programa ejecutado por el procesador. El periférico UART solo transporta bytes.
 
 ## Controlador de mapeo
 
 Este bloque se sitúa entre el bus de datos del procesador y la RAM o los periféricos. Recibe `DataAddress_o`, `DataOut_o` y `we_o`; devuelve por `DataIn_i` el dato del destino seleccionado. La ROM de programa usa su propio camino hacia el procesador y no pasa por este controlador. La lógica del controlador **solo encamina accesos**: no decide turnos, disparos ni resultados del juego.
 
-La decodificación la hace el Address Translator. Compara la dirección completa con la tabla de la sección 4.4.2 del enunciado y selecciona un único destino. RAM y VGA se seleccionan por ventana, `0x0000_2000`–`0x0000_2FFF` y `0x0001_1000`–`0x0001_17FF`. La UART solo en `0x0001_0040`, `0x0001_0044` y `0x0001_0048`, y botones, display, LED y buzzer solo en `0x0001_0120`, `0x0001_0130`, `0x0001_0138` y `0x0001_0140`. Como la comparación es exacta, display y LED no se cruzan aunque compartan el bloque de 16 bytes de `0x0001_0130`.
+El decodificador compara la dirección completa con el mapa de memoria y genera una selección para un único destino. La RAM ocupa `0x0000_2000`–`0x0000_2FFF`; UART, `0x0001_0040`–`0x0001_004F`; y VGA, `0x0001_1000`–`0x0001_17FF`. Los registros de botones, display, LED y buzzer se seleccionan en sus direcciones respectivas. En particular, display (`0x0001_0130`) y LED (`0x0001_0138`) **no** pueden distinguirse comparando solo `DataAddress_o[31:4]`, porque comparten esos bits altos.
 
-Esos cuatro periféricos tienen un solo registro, en el offset `0x00`, y reciben `addr_i` fijo en `2'b00`. Pasarles `DataAddress_o[3:2]` como a la UART no serviría para el LED, porque en `0x0001_0138` esos bits valen `2'b10`. Es la adaptación de dirección que el AT deja a las conexiones de fuera, igual que el índice de la UART, la RAM y el VGA.
+En una escritura, `DataOut_o` llega al destino, pero su habilitación se activa únicamente cuando coinciden `we_o` y la señal de selección correspondiente. Para UART se propone `write_enable_i = we_o && sel_uart`, donde `sel_uart` resulta de comparar `DataAddress_o[31:4]` con `0x0001004`; `DataAddress_o[3:2]` escoge internamente los registros de control, TX o RX mediante `addr_i[1:0]`. El controlador debe generar habilitaciones equivalentes e independientes para RAM y los demás destinos, evitando que un `sw` a uno modifique otro.
 
-En una escritura, `DataOut_o` llega al destino, pero su habilitación se activa únicamente cuando coinciden `we_o` y la señal de selección correspondiente. Para UART es `uart_we = we_o && sel_uart`, que llega como `write_enable_i`, y `DataAddress_o[3:2]` escoge internamente los registros de control, TX o RX mediante `addr_i[1:0]`. El AT genera habilitaciones equivalentes e independientes para los demás destinos (`ram_we`, `display_we`, `led_we`, `buzzer_we`, `vga_we`, y `gpio_we` fijo en cero), así que un `sw` a uno no modifica otro.
-
-En una lectura, `MUX_LECTURA`, el MUX de lectura externo de `Address_Translator.md`, selecciona el dato de RAM o la salida `rdata_o` del periférico indicado y lo entrega a `DataIn_i`. Para direcciones sin destino, incluidas `0x0001_004C` y las no alineadas, el AT pone `mux_sel` en `111`, el MUX devuelve cero y no se habilita ninguna escritura. Como el procesador es uniciclo, el camino de lectura y su latencia se tendrán que comprobar al integrar la RAM y los periféricos. Estas conexiones del controlador son todavía una propuesta, no RTL ya implementado.
+En una lectura, `MUX_LECTURA` selecciona el dato de RAM o la salida `rdata_o` del periférico indicado y lo entrega a `DataIn_i`. Para direcciones sin destino se propone devolver cero y no habilitar ninguna escritura; también deben definirse los accesos no alineados. Como el procesador es uniciclo, el camino de lectura y su latencia se tendrán que comprobar al integrar la RAM y los periféricos. Estas conexiones del controlador son todavía una propuesta, no RTL ya implementado.
 
 ## PERIFERICO_UART
 
-El bloque sigue [`periferico_uart.sv`](../../../src/design/periferico_uart.sv) y sus dos submódulos [`uart_tx.sv`](../../../src/design/uart_tx.sv) y [`uart_rx.sv`](../../../src/design/uart_rx.sv). La ficha completa, con los puntos a) a j), está en [`PERIFERICO_UART.md`](../modulos/PERIFERICO_UART.md).
-
-- **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Los pines seriales son `rx_i` (B18) y `tx_o` (A18).
-- **Selección.** El Address Translator activa `sel_uart` solo en `0x0001_0040`, `0x0001_0044` y `0x0001_0048`, la escritura se habilita con `uart_we = we_o && sel_uart`, que llega como `write_enable_i`, y `DataAddress_o[3:2]` llega como `addr_i`. Como compara la dirección completa, la UART no aparece repetida en otras direcciones del espacio de periféricos, y `0x0001_004C` no la selecciona aunque caiga en su bloque de 16 bytes.
-
-`escribir_tx`, `escribir_ctrl` y `escribir_rx` no son señales con nombre en el `.sv`, son las condiciones `write_enable_i && addr_i == ...` de cada `always_ff`.
-
-### DECOD_DIR
-
-Elige cuál de los tres registros recibe una escritura.
-
-- Entradas, `write_enable_i` y `addr_i[1:0]`.
-- Salidas, las habilitaciones de escritura de `REG_DATOS_TX` (`2'b01`), `REG_CONTROL` (`2'b00`) y `REG_DATOS_RX` (`2'b10`).
-
-Son tres comparaciones de `addr_i` contra `ADDR_DATOS_TX`, `ADDR_CONTROL` y `ADDR_DATOS_RX`, cada una en AND con `write_enable_i`. La dirección `2'b11` no habilita nada.
-
-### REG_DATOS_TX
-
-Guarda el byte que el programa quiere mandar, en `0x0001_0044`.
-
-- Entradas, `wdata_i[7:0]` y la habilitación de `DECOD_DIR`.
-- Salidas, `reg_tx[7:0]` hacia `NUCLEO_UART_TX` y `MUX_RD`.
-
-Registro de 8 bits con reset síncrono. Solo cambia cuando el programa lo escribe.
-
-### REG_CONTROL
-
-Lleva las dos banderas que el programa sondea en `0x0001_0040`, `send` en el bit 0 y `new_rx` en el bit 1.
-
-- Entradas, `wdata_i[1:0]`, la habilitación de `DECOD_DIR`, `o_listo` de `NUCLEO_UART_TX` y `o_dato_listo` de `NUCLEO_UART_RX`.
-- Salidas, `reg_control[0]` (`send`) hacia `i_enviar` de `NUCLEO_UART_TX`, y `reg_control[31:0]` hacia `MUX_RD`.
-
-Registro de 32 bits donde solo los bits 0 y 1 tienen lógica, el resto queda en cero desde el reset. `send` sube cuando el programa escribe un 1 en el bit 0 y baja solo con `o_listo`. `new_rx` sube con `o_dato_listo` y toma el valor de `wdata_i[1]` en cualquier escritura al control, y un byte que llega le gana a la escritura del mismo ciclo. Como una escritura para arrancar un envío también escribe `new_rx`, el programa sigue el orden de [Cómo usa la ROM el periférico](#cómo-usa-la-rom-el-periférico).
-
-### REG_DATOS_RX
-
-Guarda el último byte que llegó por `rx_i`, en `0x0001_0048`.
-
-- Entradas, `o_dato[7:0]` y `o_dato_listo` de `NUCLEO_UART_RX`, `wdata_i[7:0]` y la habilitación de `DECOD_DIR`.
-- Salidas, `reg_rx[7:0]` hacia `MUX_RD`.
-
-Registro de 8 bits que carga `o_dato` cuando llega `o_dato_listo`. También se puede escribir por el bus, pero el byte que llega del núcleo tiene prioridad.
-
-### MUX_RD
-
-Pone en `rdata_o` el registro que apunta `addr_i`.
-
-- Entradas, `addr_i[1:0]`, `reg_control`, `reg_tx` y `reg_rx`.
-- Salidas, `rdata_o[31:0]` hacia `MUX_LECTURA`.
-
-Multiplexor combinacional de cuatro entradas. Los registros de 8 bits se rellenan con ceros a 32, y `2'b11` devuelve cero. Como es combinacional, un `lw` a la UART tiene su dato en el mismo ciclo en que el procesador pone la dirección.
-
-### NUCLEO_UART_TX
-
-Suelta por `tx_o` el byte de `REG_DATOS_TX` en formato 8N1 a 115200 baudios.
-
-- Entradas, `i_enviar`, que es `send`, e `i_dato[7:0]`.
-- Salidas, `o_tx` hacia el pin A18, y `o_listo`, pulso de un ciclo al terminar, hacia `REG_CONTROL`.
-
-Divisor de baudaje de 868 ciclos, una máquina de cuatro estados que recorre arranque, ocho datos y parada, y un detector de flanco que produce `o_listo`. El detalle está en [`NUCLEO_UART_TX.md`](../modulos/NUCLEO_UART_TX.md).
-
-### NUCLEO_UART_RX
-
-Recupera los bytes que llegan por `rx_i`.
-
-- Entradas, `i_rx` desde el pin B18.
-- Salidas, `o_dato[7:0]` y `o_dato_listo`, pulso de un ciclo, hacia `REG_DATOS_RX` y `REG_CONTROL`.
-
-Sobremuestreo a 16 veces el baudaje con un divisor de 54 ciclos, una máquina de cuatro estados que cae al centro de cada bit, y un detector de flanco que produce `o_dato_listo`. El detalle está en [`NUCLEO_UART_RX.md`](../modulos/NUCLEO_UART_RX.md).
-
-El diseño del Proyecto 3 tiene **un único maestro del periférico, el procesador**, así que el árbitro, el receptor y el transmisor del Proyecto 2 no existen acá, su trabajo lo hace la ROM. El periférico todavía no aparece instanciado en un `top.sv` del sistema completo.
-
-## PERIFERICO_ENTRADAS
-
-El bloque sigue [`periferico_entradas.sv`](../../../src/design/periferico_entradas.sv). La ficha completa, con los puntos a) a j), está en [`PERIFERICO_ENTRADAS.md`](../modulos/PERIFERICO_ENTRADAS.md).
-
-- **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Los pines son `botones_i[6:0]`, los cinco botones de la Basys 3, con `BTN_SEL` en `btnC`, y `BTN_OK` y `BTN_RST` en los switches SW0 (V17) y SW15 (R2).
-- **Selección.** El Address Translator pone `mux_sel` en `010` solo con `0x0001_0120`. El registro es de solo lectura, así que `gpio_we` queda fijo en cero, y `write_enable_i` y `wdata_i` llegan al periférico solo porque son parte de la interfaz estándar. `addr_i` va fijo en `2'b00`.
-
-No hay `DECOD_DIR` porque no hay nada que escribir, y tampoco antirrebote. Según el profesor los botones de la tarjeta ya llegan filtrados, y los dos switches tampoco rebotan. Los flancos los saca el programa con `actual & ~botones_prev`.
-
-### REG_ESTADO
-
-Copia los siete pines en cada flanco del reloj.
-
-- Entradas, `botones_i[6:0]`.
-- Salidas, `estado[6:0]` hacia `MUX_RD`.
-
-Registro de 7 bits con reset síncrono y sin habilitación. Está para que el pin, que es asíncrono, termine en un flip-flop y no llegue combinacional hasta `DataIn_i`. `BTN_RST` es el bit 6 y no llega a `rst_i`, si llegara el registro estaría en reset mientras SW15 esté arriba y el programa nunca vería el flanco.
-
-### MUX_RD
-
-Pone el estado de los botones en `rdata_o`.
-
-- Entradas, `addr_i[1:0]` y `estado[6:0]`.
-- Salidas, `rdata_o[31:0]` hacia `MUX_LECTURA`, en la entrada `gpio_dout` del AT.
-
-Con `addr_i = 2'b00` devuelve `estado` rellenado con ceros a 32 bits, y cero en cualquier otra dirección.
-
-## PERIFERICO_7SEG
-
-El bloque sigue [`periferico_7seg.sv`](../../../src/design/periferico_7seg.sv) y su submódulo [`marcador.sv`](../../../src/design/marcador.sv). La ficha completa está en [`PERIFERICO_7SEG.md`](../modulos/PERIFERICO_7SEG.md) y la del submódulo en [`marcador.md`](../modulos/marcador.md).
-
-- **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Hacia el display salen `seg_o[6:0]`, `an_o[3:0]` y `dp_o`, todos activos en bajo.
-- **Selección.** El Address Translator activa `display_we = we_o && sel_7seg` solo con `0x0001_0130` y pone `mux_sel` en `011` para leerlo. `addr_i` va fijo en `2'b00`.
-
-El programa lleva las partidas ganadas en BCD y escribe los cuatro dígitos de una vez, el Jugador 1 en `AN3` y `AN2` y el Jugador 2 en `AN1` y `AN0`. Con 3 ganadas del Jugador 1 y 12 del Jugador 2 escribe `0x0000_0312`.
-
-### DECOD_DIR
-
-- Entradas, `write_enable_i` y `addr_i[1:0]`.
-- Salidas, `escribir_digitos` hacia `REG_DIGITOS`.
-
-Es `write_enable_i && addr_i == 2'b00`.
-
-### REG_DIGITOS
-
-Guarda los cuatro dígitos y los cuatro puntos decimales.
-
-- Entradas, `wdata_i[19:0]` y `escribir_digitos`.
-- Salidas, `reg_digitos[15:0]` como `i_digitos` y `reg_digitos[19:16]` como `i_puntos` hacia `MARCADOR`, y `reg_digitos` completo hacia `MUX_RD`.
-
-Registro de 20 bits con reset síncrono. Solo `rst_i` lo pone en cero, así que las ganadas sobreviven a `BTN_RST`, que lo atiende el programa sin tocar este registro. Los puntos quedan libres para marcar el turno si el programa quiere.
-
-### MUX_RD
-
-- Entradas, `addr_i[1:0]` y `reg_digitos`.
-- Salidas, `rdata_o[31:0]` hacia `MUX_LECTURA`, en la entrada `display_dout` del AT.
-
-Devuelve `reg_digitos` con ceros arriba en `2'b00` y cero en lo demás. Con la lectura el programa puede cambiar los dígitos de un solo jugador sin llevar una copia aparte.
-
-### MARCADOR
-
-Hace el barrido de los cuatro dígitos.
-
-- Entradas, `i_digitos[15:0]` e `i_puntos[3:0]`.
-- Salidas, `o_seg[6:0]`, `o_an[3:0]` y `o_dp`, que salen del periférico como `seg_o`, `an_o` y `dp_o`.
-
-Un contador libre de 18 bits elige con sus dos bits de arriba el dígito activo, cada uno por 655 µs, y un decodificador pasa el nibble a segmentos. Un nibble de 10 a 15 apaga el dígito. Es el `marcador` del Proyecto 2 sin la división entre 10, porque los dígitos ya llegan en BCD.
-
-## PERIFERICO_LED
-
-El bloque sigue [`periferico_led.sv`](../../../src/design/periferico_led.sv). La ficha completa está en [`PERIFERICO_LED.md`](../modulos/PERIFERICO_LED.md).
-
-- **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Hacia la tarjeta sale `leds_o[2:0]`, a LD0 (U16), LD1 (E19) y LD2 (U19).
-- **Selección.** El Address Translator activa `led_we = we_o && sel_led` solo con `0x0001_0138` y pone `mux_sel` en `100` para leerlo. `addr_i` va fijo en `2'b00`, porque en esa dirección `DataAddress_o[3:2]` vale `2'b10`.
-
-### DECOD_DIR
-
-- Entradas, `write_enable_i` y `addr_i[1:0]`.
-- Salidas, `escribir_leds` hacia `REG_LEDS`.
-
-Es `write_enable_i && addr_i == 2'b00`.
-
-### REG_LEDS
-
-Guarda qué LED está encendido.
-
-- Entradas, `wdata_i[2:0]` y `escribir_leds`.
-- Salidas, `reg_leds[2:0]`, directo a `leds_o` y hacia `MUX_RD`.
-
-Registro de 3 bits con reset síncrono. El programa escribe `0x1` en colocación, `0x2` en batalla y `0x4` en resultado, así cada fase tiene su propio LED y se distingue sin tabla. No hay decodificador, el programa escribe el patrón directo.
-
-### MUX_RD
-
-- Entradas, `addr_i[1:0]` y `reg_leds`.
-- Salidas, `rdata_o[31:0]` hacia `MUX_LECTURA`, en la entrada `led_dout` del AT.
-
-Devuelve `reg_leds` con ceros arriba en `2'b00` y cero en lo demás.
-
-## PERIFERICO_BUZZER
-
-El bloque sigue [`periferico_buzzer.sv`](../../../src/design/periferico_buzzer.sv) y sus dos submódulos [`secuenciador_melodia.sv`](../../../src/design/secuenciador_melodia.sv) y [`generador_tono.sv`](../../../src/design/generador_tono.sv). La ficha completa está en [`PERIFERICO_BUZZER.md`](../modulos/PERIFERICO_BUZZER.md), y la de los submódulos en [`secuenciador_melodia.md`](../modulos/secuenciador_melodia.md) y [`generador_tono.md`](../modulos/generador_tono.md).
-
-- **Interfaz del bus.** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Hacia el buzzer sale `buzzer_o`, en M18 (JC2).
-- **Selección.** El Address Translator activa `buzzer_we = we_o && sel_buzzer` solo con `0x0001_0140` y pone `mux_sel` en `101` para leerlo. `addr_i` va fijo en `2'b00`.
-
-Las cinco melodías que pide el enunciado viven en el periférico. El programa escribe un código y sigue con el lazo, sin esperar a que termine de sonar.
-
-### DECOD_DIR
-
-- Entradas, `write_enable_i` y `addr_i[1:0]`.
-- Salidas, `escribir_sonido` hacia `REG_SONIDO` y como `i_iniciar` hacia `SECUENCIADOR_MELODIA`.
-
-Es `write_enable_i && addr_i == 2'b00`. El mismo pulso carga el código y reinicia el secuenciador, así una escritura nueva corta la melodía que venga sonando.
-
-### REG_SONIDO
-
-Guarda el código de la melodía que está sonando.
-
-- Entradas, `wdata_i[2:0]`, `escribir_sonido` y `o_fin` de `SECUENCIADOR_MELODIA`.
-- Salidas, `reg_sonido[2:0]` como `i_sonido` hacia `SECUENCIADOR_MELODIA` y hacia `MUX_RD`.
-
-Registro de 3 bits con reset síncrono. Los códigos son `000` silencio, `001` impacto, `010` fallo, `011` hundido, `100` colocación inválida y `101` victoria. Vuelve solo a `000` con `o_fin`, y la escritura le gana a `o_fin` porque en reposo `o_fin` está siempre en alto.
-
-### MUX_RD
-
-- Entradas, `addr_i[1:0]` y `reg_sonido`.
-- Salidas, `rdata_o[31:0]` hacia `MUX_LECTURA`, en la entrada `buzzer_dout` del AT.
-
-Devuelve `reg_sonido` con ceros arriba en `2'b00` y cero en lo demás. Leer cero quiere decir que el buzzer ya se calló.
-
-### SECUENCIADOR_MELODIA
-
-Recorre la melodía nota por nota.
-
-- Entradas, `i_iniciar` e `i_sonido[2:0]`.
-- Salidas, `o_n[17:0]` y `o_sonar` hacia `GENERADOR_TONO`, y `o_fin` hacia `REG_SONIDO`.
-
-`ROM_MELODIAS` guarda hasta ocho pasos por código, cada uno con una nota y una duración en unidades de 50 ms, y `ROM_NOTAS` pasa la nota al medio periodo del divisor. Tres contadores miden los 50 ms, las unidades de la nota y el paso. Un paso con duración cero es el fin de la melodía.
-
-### GENERADOR_TONO
-
-Saca la onda cuadrada.
-
-- Entradas, `i_n[17:0]` e `i_sonar`.
-- Salidas, `o_sound`, que sale del periférico como `buzzer_o`.
-
-Un contador de 18 bits vuelve a cero cuando llega a `i_n` y en ese momento invierte la onda. Compara con `>=`, porque la nota cambia sin pasar por silencio y el contador puede quedar arriba del N nuevo. Es el divisor del `generador_tono` del Proyecto 2, sin la parte que decidía qué sonaba.
+El bloque sigue [`src/design/periferico_uart.sv`](https://github.com/Taller-de-diseno-digital-GR01/Proyecto-3-Batalla-Naval/blob/feature/uart/src/design/periferico_uart.sv) y sus dos submódulos [`uart_tx.sv`](https://github.com/Taller-de-diseno-digital-GR01/Proyecto-3-Batalla-Naval/blob/feature/uart/src/design/uart_tx.sv) y [`uart_rx.sv`](https://github.com/Taller-de-diseno-digital-GR01/Proyecto-3-Batalla-Naval/blob/feature/uart/src/design/uart_rx.sv).
+
+- **Interfaz del bus:** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Los pines seriales son `rx_i` y `tx_o`.
+- **Selección interna:** `addr_i=00` selecciona `reg_control` en `0x0001_0040`; `01` selecciona `reg_tx` en `0x0001_0044`; `10` selecciona `reg_rx` en `0x0001_0048`. La combinación `11` no está asignada, devuelve cero al leer y no escribe ningún registro.
+- **Transmisión:** el programa escribe un byte en `reg_tx` y luego pone `reg_control[0]` (`send`) en uno. `uart_tx` toma el byte, lo transmite y emite `o_listo`; el registro baja `send` al terminar. El núcleo TX usa `TICKS_BIT=868` como valor predeterminado para el reloj de 100 MHz y 115200 baudios.
+- **Recepción:** `uart_rx` reconstruye el byte entrante con sobremuestreo, lo entrega como `o_dato` y pulsa `o_dato_listo`. Entonces se carga `reg_rx` y sube `reg_control[1]` (`new_rx`). Tras leer el byte, el programa limpia esa bandera escribiendo cero en el bit 1 del registro de control. El núcleo RX usa `TICKS_X16=54` de forma predeterminada.
+- **Lectura:** `rdata_o` selecciona combinacionalmente control, TX o RX y extiende a 32 bits los bytes de datos. Un nuevo byte recibido tiene prioridad frente a una escritura del CPU a `reg_rx` o al bit `new_rx` en el mismo ciclo.
+
+Los archivos `arbitro_uart.sv`, `receptor_uart.sv` y `transmisor_uart.sv` también aparecen en la rama, pero proceden del Proyecto 2: el diseño documentado para Proyecto 3 tiene **un único maestro del periférico, el procesador**, y no coloca ese árbitro entre CPU y UART. El periférico todavía no aparece instanciado en un `top.sv` del sistema completo.
 
 ## VGA
 Este bloque corresponde al módulo que conecta al procesador (CPU) con el monitor mediante el estándar de video VGA. La ficha completa, con los puntos a) a j), está en [`modulos/PERIFERICO_VGA.md`](../modulos/PERIFERICO_VGA.md).
@@ -362,9 +123,9 @@ Este bloque corresponde al módulo que conecta al procesador (CPU) con el monito
   - Lado del monitor: `vga_hsync_o`, `vga_vsync_o`, `vga_r_o[3:0]`, `vga_g_o[3:0]` y `vga_b_o[3:0]`.
 
 - **Selección:** el controlador compara `DataAddress_o[31:11]` con `0x00022` para obtener `sel_vga`, que cubre `0x0001_1000`–`0x0001_17FF`. La escritura se habilita con `write_enable_i = we_o && sel_vga`, y `DataAddress_o[10:2]` llega como `addr_i`.
-- **Memoria de video:** BRAM de doble puerto de 512 × 32 bits, una palabra por casilla de una cuadrícula de 20 × 15 casillas de 32 × 32 píxeles. El puerto A (`clk_i`) atiende los `lw`/`sw` del CPU en un solo ciclo. El puerto B (`clk_pix_i`) lo lee el barrido de forma continua.
+- **Memoria de video:** RAM distribuida de doble puerto de 512 × 32 bits, una palabra por casilla de una cuadrícula de 20 × 15 casillas de 32 × 32 píxeles. El puerto A atiende al CPU igual que la RAM de datos del núcleo: escribe en el flanco de `clk_i` y lee de forma combinacional, así un `lw` recibe el dato en el mismo ciclo. El puerto B lo lee el barrido de forma continua y registra el color con `clk_pix_i`.
 - **Barrido:** dos contadores (módulo 800 y módulo 525) y sus comparadores generan `hsync`, `vsync` y `video_on` para 640 × 480 a 60 Hz. El índice de la casilla es `fila × 20 + col`, con `col = h_count[9:5]` y `fila = v_count[8:5]`.
-- **Salida:** los bits `[2:0]` de la palabra pasan por una paleta a RGB444, se fuerzan a negro fuera del área visible y se registran junto con los sincronismos, que se retrasan lo mismo que la lectura de la BRAM.
+- **Salida:** los bits `[2:0]` de la palabra pasan por una paleta a RGB444, se fuerzan a negro fuera del área visible y se registran junto con los sincronismos, que se retrasan lo mismo que la lectura del puerto B.
 
 ## Programa en ensamblador
 
@@ -376,7 +137,7 @@ El procesador es el núcleo de ciclo único de [riscv-simple-sv](https://github.
 
 Para el programa eso significa:
 
-- **El programa usa la lista base del instructivo más `lui`.** El instructivo presenta la lista como una base, y `lui` arma cada dirección base en una sola instrucción (tabla de abajo) y permite `li` con cualquier constante. El resto de lo que implementa el núcleo no se usa, para no sumar instrucciones que verificar y justificar. Sin `auipc`, las subrutinas se llaman con `jal ra, NOMBRE` en lugar de `call`, y no se usa `la`. El detalle está en la sección 1.1 de [`PROGRAMA.md`](../modulos/PROGRAMA.md).
+- **Las direcciones se arman con `lui`.** Cada dirección base sale de una sola instrucción (tabla de abajo), y el programa puede usar `li`, `la` y `call` sin restricción.
 - **Los periféricos y la memoria de video se acceden solo con `lw` y `sw`.** El núcleo genera habilitaciones por byte para `sb` y `sh`, pero la interfaz estándar de periféricos del instructivo no las tiene. Un `sb` a un periférico escribiría la palabra entera con el dato desplazado. En la RAM las variables y las casillas también ocupan una palabra, para que todo el programa use las mismas dos instrucciones de memoria.
 - **No hay `mul`.** Los índices salen con desplazamientos: `fila × 8 = fila << 3` para los tableros y `fila × 20 = (fila << 4) + (fila << 2)` para la memoria de video.
 - **La ROM no está en el bus de datos.** El Address Translator no la mapea, así que el programa no puede leer tablas constantes de la ROM con `lw`. Las constantes van como inmediatos. La longitud de un barco, por ejemplo, sale de `4 − id` (4, 3 y 2 casillas para los id 0, 1 y 2).
@@ -442,11 +203,11 @@ Con esta codificación una casilla ya disparada es la que tiene el bit 1 en uno,
 | `0x0000_2250` a `0x0000_2260` | `rx_trama[5]` | Bytes de la trama UART en armado |
 | `0x0000_2FFC` hacia abajo | pila | Direcciones de retorno y registros que guardan las subrutinas |
 
-Un barco está hundido cuando `impactos_jX[id]` llega a `4 − id`, y la partida termina cuando `hundidos_por_jX` llega a 3 (los 9 impactos de la flota). `NUEVA_PARTIDA` limpia todo lo anterior salvo dos variables. `ganadas_bcd` se conserva, porque solo se pone en cero en el arranque por `rst_i`. `botones_prev` se carga con la lectura actual de los botones, porque si quedara en cero y `BTN_RST` siguiera apretado, la vuelta siguiente vería otro flanco y la partida se reiniciaría una y otra vez mientras el botón siga abajo.
+Un barco está hundido cuando `impactos_jX[id]` llega a `4 − id`, y la partida termina cuando `hundidos_por_jX` llega a 3 (los 9 impactos de la flota). `NUEVA_PARTIDA` limpia todo lo anterior salvo `ganadas_bcd`, que solo se pone en cero en el arranque por `rst_i`.
 
 ### Códigos que escribe el programa en los periféricos
 
-- **LED de estado:** un bit por fase, `0x1` colocación (LD0), `0x2` batalla (LD1) y `0x4` resultado (LD2).
+- **LED de estado:** `00` colocación, `01` batalla, `10` resultado.
 - **Buzzer:** los códigos de `REG_SONIDO`, `001` impacto, `010` fallo, `011` hundido, `100` colocación inválida y `101` victoria. Un código nuevo corta al que esté sonando, así que un disparo que hunde un barco escribe solo `011`, y el que termina la partida escribe solo `101`.
 - **Displays:** `ganadas_bcd` completo, en una sola escritura.
 
@@ -461,7 +222,7 @@ Todos los mensajes, en los dos sentidos, son tramas de 5 bytes con el mismo form
   inicio   mensaje  dato 1   dato 2   verificación
 ```
 
-- **Inicio `0xAA`.** En una trama válida `0xAA` solo aparece en el primer byte. Los TIPO van de `0x10` a `0x25`, las casillas llegan hasta `0x77`, el id con la orientación hasta `0x82`, los conteos del resumen hasta 64, y ninguna verificación posible da `0xAA`. Por eso cualquier `0xAA` que llegue pone `rx_indice` en 1, vaya por donde vaya la trama en armado, y cualquier otro byte con `rx_indice` en 0 se descarta. Si se pierde un byte, se pierde solo esa trama y la siguiente entra completa. Un mensaje o un rango nuevo tiene que respetar esta propiedad.
+- **Inicio `0xAA`.** Si el primer byte no es `0xAA`, el receptor lo descarta y sigue buscando. Así se vuelve a sincronizar si se pierde un byte.
 - **Longitud fija.** El receptor en ensamblador es un contador de 0 a 4 (`rx_indice`), y la aplicación de PC usa el mismo lector.
 - **Verificación XOR.** Detecta bytes corruptos. Junto con el inicio y la revisión de rangos cumple el requisito de descartar todo byte que no forme un mensaje válido.
 - **Casilla en un byte.** Toda casilla viaja como `(fila << 4) | columna`, con fila y columna de 0 a 7.
@@ -479,30 +240,7 @@ Todos los mensajes, en los dos sentidos, son tramas de 5 bytes con el mismo form
 
 Disparo dado lleva la casilla para que la PC no tenga que recordar qué mandó, y el código `11` le avisa que el disparo se ignoró por repetido y que tiene que pedir otra casilla. Disparo recibido lleva la casilla porque la PC no tiene otra forma de saber dónde disparó el Jugador 1. El resumen son cuatro números, así que va en dos tramas.
 
-Un byte que no completa una trama válida, o una trama válida que no corresponde a la fase o al turno en curso, se descarta sin respuesta y sin afectar la partida. Una trama de la PC es válida si pasa todos estos chequeos:
-
-- La verificación coincide con `TIPO xor D1 xor D2`.
-- `TIPO` es `0x10` o `0x11`, los únicos que manda la PC.
-- Toda casilla cumple `(casilla & 0x88) == 0`, o sea fila y columna de 0 a 7. En ensamblador es un `andi` y un `bnez`.
-- En Colocar barco, `(D1 & 0x7C) == 0` y el id no es 3.
-- En Disparo, `D2` es `0x00`.
-
-Una casilla con fila o columna mayor que 7 es una trama malformada y se descarta sin respuesta, porque la aplicación de PC ya valida ese rango antes de transmitir. El motivo `10` de Resultado de colocación es solo para un barco que empieza dentro del tablero y se sale por su largo y su orientación.
-
-#### Cómo usa la ROM el periférico
-
-El registro de control guarda `send` y `new_rx` en la misma palabra, y cualquier escritura al control escribe los dos. Un `sw` de 1 para arrancar un envío deja también `new_rx` en 0, y si había un byte recibido sin leer se pierde sin aviso. Por eso la ROM sigue siempre el mismo orden.
-
-- **Recibir.** Cuando `new_rx` está en 1, `lw` del dato en `0x048(s0)`, `sw x0, 0x040(s0)` para limpiar `new_rx`, y después procesar el byte. Escribir 0 no baja `send`, ese bit solo lo baja el núcleo al terminar.
-- **Enviar un byte.** Esperar `send` en 0, `sw` del byte en `0x044(s0)`, y arrancar con `lw` del control, `ori` con 1 y `sw` al control. Así se escribe de vuelta el `new_rx` que había.
-
-Con el `lw`, `ori` y `sw` sigue quedando una ventana de dos ciclos, un byte que termine de llegar entre el `lw` y el `sw` se pierde. La regla de conversación de abajo hace que esa ventana no se alcance.
-
-Una trama se manda completa de una vez, esperando `send` en 0 antes de cada byte. Por la ventana muerta de `uart_tx` cada byte ocupa como mínimo 12 tiempos de bit, así que una trama de 5 bytes tarda unos 520 µs, y el fin de partida manda 3 tramas seguidas, unos 1.6 ms. El detalle está en [`NUCLEO_UART_TX.md`](../modulos/NUCLEO_UART_TX.md). Durante ese rato el lazo no sondea `new_rx`, y el periférico guarda un solo byte recibido, así que un segundo byte pisaría al primero.
-
-Las dos cosas se resuelven con una regla que es parte del protocolo, la PC solo transmite cuando le toca y espera la respuesta antes de volver a transmitir. En la colocación manda un Colocar barco y no manda el siguiente hasta recibir su Resultado de colocación. En la batalla manda un Disparo solo con el turno del Jugador 2 y espera el Disparo dado. Todo lo demás que manda la FPGA cae en momentos en que la PC no está transmitiendo. El único caso que se sale es `BTN_RST` mientras la PC manda una colocación, y lo peor que pasa ahí es que esa trama se pierde. `NUEVA_PARTIDA` pone `rx_indice` en 0 junto con el resto de la RAM, y la PC toma un Estado colocación como reinicio de su vista en cualquier momento de la partida.
-
-Como la FPGA descarta sin responder, la PC espera cada respuesta con un tiempo límite. Si vence, avisa al usuario y vuelve a pedir la jugada en vez de quedarse colgada. Reenviar un Colocar barco es seguro, porque si el primero sí entró la respuesta es `11` y la PC lo toma como aceptado. Con un Disparo no, si el primero contó y se perdió la respuesta, el reenvío sale como repetido. Con el puente USB-UART de la tarjeta eso es muy improbable, y el Estado turno del Jugador 1 que llega después le indica a la PC que deje de pedir disparo.
+Un byte que no completa una trama válida, o una trama válida que no corresponde a la fase o al turno en curso, se descarta sin respuesta y sin afectar la partida.
 
 ### Flujo general
 
@@ -511,9 +249,9 @@ flowchart TD
     ARR(["Arranque por rst_i"]) --> BASE["Cargar registros base y sp"]
     BASE --> GAN["ganadas_bcd = 0<br/>Escribir displays"]
     GAN --> NP["NUEVA_PARTIDA<br/>Limpiar tableros y variables en RAM<br/>Limpiar memoria de video<br/>Dibujar tableros vacíos y HUD"]
-    NP --> INI["fase = colocación, LED = 0x1<br/>UART: Estado colocación"]
+    NP --> INI["fase = colocación, LED = 00<br/>UART: Estado colocación"]
     INI --> COL[["Fase de colocación"]]
-    COL -->|"flotas de J1 y J2 completas"| BAT0["fase = batalla, LED = 0x2, turno = J1<br/>UART: Estado batalla y Estado turno J1"]
+    COL -->|"flotas de J1 y J2 completas"| BAT0["fase = batalla, LED = 01, turno = J1<br/>UART: Estado batalla y Estado turno J1"]
     BAT0 --> BAT[["Fase de batalla"]]
     BAT -->|"hundidos = 3"| FIN[["Fin de partida"]]
     COL -->|"BTN_RST"| NP
@@ -521,9 +259,9 @@ flowchart TD
     FIN -->|"BTN_RST"| NP
 ```
 
-El programa tiene dos entradas. El arranque por `rst_i` es el reinicio general del sistema, que se dispara con el botón PROG: carga los registros base y pone en cero las partidas ganadas. `BTN_RST` salta directo a `NUEVA_PARTIDA` y conserva las ganadas, como pide el instructivo.
+El programa tiene dos entradas. El arranque por `rst_i` es el reinicio general del sistema: carga los registros base y pone en cero las partidas ganadas. `BTN_RST` salta directo a `NUEVA_PARTIDA` y conserva las ganadas, como pide el instructivo.
 
-Cada fase es un **lazo que nunca espera**. En cada vuelta el programa lee los botones una vez, atiende como máximo un byte de la UART y vuelve a empezar. La única espera es la transmisión de una trama, que está acotada y se explica en los mensajes UART. Así el Jugador 1 y el Jugador 2 avanzan a la vez sin que uno bloquee al otro, que es lo que exige la colocación concurrente. Los botones se leen por flanco, `flancos = actual & ~botones_prev`, porque el periférico de entradas entrega niveles y una presión larga se vería en muchas vueltas seguidas. `BTN_RST` se revisa en todas las vueltas de las tres fases.
+Cada fase es un **lazo que nunca espera**. En cada vuelta el programa lee los botones una vez, atiende como máximo un byte de la UART y vuelve a empezar. Así el Jugador 1 y el Jugador 2 avanzan a la vez sin que uno bloquee al otro, que es lo que exige la colocación concurrente. Los botones se leen por flanco, `flancos = actual & ~botones_prev`, porque el periférico de entradas entrega niveles y una presión larga se vería en muchas vueltas seguidas. `BTN_RST` se revisa en todas las vueltas de las tres fases.
 
 ### Fase de colocación
 
@@ -597,7 +335,7 @@ Mientras es el turno del Jugador 2, las tramas se siguen leyendo en cada vuelta 
 
 ```mermaid
 flowchart TD
-    E(["Fin de partida"]) --> F["fase = resultado, LED = 0x4"]
+    E(["Fin de partida"]) --> F["fase = resultado, LED = 10"]
     F --> HUD["Pintar en el HUD el color del ganador"]
     HUD --> BZ["Buzzer: victoria"]
     BZ --> M["ganadas_bcd del ganador + 1<br/>Escribir displays"]
@@ -620,8 +358,6 @@ La privacidad se cumple en los dos únicos puntos por donde el programa saca inf
 
 ## Funcionamiento en conjunto
 
-Para transmitir un byte, el programa escribe en `0x0001_0044` y luego activa `send` en `0x0001_0040`. El decodificador de direcciones selecciona UART; sus registros alimentan `uart_tx`, que serializa el dato hacia la PC. Para recibirlo, `uart_rx` carga `reg_rx`, sube `new_rx` y el programa puede consultar `0x0001_0040`, leer `0x0001_0048` y limpiar la bandera. Las esperas del enlace se gestionan por sondeo de esos bits; UART no decide las jugadas. El orden exacto de esos accesos está en [Cómo usa la ROM el periférico](#cómo-usa-la-rom-el-periférico).
+Para transmitir un byte, el programa escribe en `0x0001_0044` y luego activa `send` en `0x0001_0040`. El decodificador de direcciones selecciona UART; sus registros alimentan `uart_tx`, que serializa el dato hacia la PC. Para recibirlo, `uart_rx` carga `reg_rx`, sube `new_rx` y el programa puede consultar `0x0001_0040`, leer `0x0001_0048` y limpiar la bandera. Las esperas del enlace se gestionan por sondeo de esos bits; UART no decide las jugadas.
 
-Los otros cuatro periféricos no tienen protocolo. En cada vuelta del lazo el programa hace un `lw` a `0x0001_0120` para los botones, y cuando cambia algo que se ve en la tarjeta hace un `sw` al LED en cada cambio de fase, al buzzer en cada disparo o colocación inválida y al final de la partida, y a los displays cuando alguien gana. De los cuatro, el juego solo necesita leer los botones. Los otros tres también se pueden leer, lo que sirve para revisar en simulación qué escribió el programa.
-
-Las conexiones completas del procesador con RAM, VGA y los periféricos siguen pendientes de integración. La organización interna del VGA descrita en su sección es una **propuesta** de diseño: la rama `feature/VGA` todavía no contiene RTL.
+Las conexiones completas del procesador con RAM, VGA y los demás periféricos siguen pendientes de integración. El periférico VGA ya está implementado y verificado por separado en `src/design/periferico_vga.sv`, pero todavía no aparece instanciado en un `top.sv`.
