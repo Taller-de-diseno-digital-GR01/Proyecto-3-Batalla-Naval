@@ -166,8 +166,12 @@ programa:
 
 # $(PROG_HEX) está en los prerrequisitos de la síntesis porque la ROM lo lee con $readmemh:
 # si falta se genera, y si cambia se vuelve a sintetizar
+#
+# El -lib carga las primitivas de Xilinx (PLLE2_BASE, BUFG) como cajas negras, para que la síntesis
+# genérica acepte el generador_relojes del top. synth_xilinx de la regla del bitstream ya las trae.
 $(NETLIST_OUT): $(DESIGN_SRCS) $(PROG_HEX) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
 	@$(YOSYS) -p " \
+		read_verilog -lib +/xilinx/cells_sim.v +/xilinx/cells_xtra.v; \
 		read_verilog -sv $(DESIGN_SRCS); \
 		hierarchy -check -top $(SYNTH_TOP); \
 		proc; opt; \

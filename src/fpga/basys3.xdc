@@ -1,0 +1,100 @@
+## Restricciones de la Basys 3 (rev B) para src/design/top.sv.
+## Los pines salen del inciso j) de cada documento en docs/diseño/modulos/.
+## Una propiedad por linea, que es lo que entiende el lector de XDC de nextpnr-xilinx.
+
+## Reloj de 100 MHz
+set_property PACKAGE_PIN W5 [get_ports clk]
+set_property IOSTANDARD LVCMOS33 [get_ports clk]
+create_clock -period 10.00 [get_ports clk]
+
+## Entradas del Jugador 1 (PERIFERICO_ENTRADAS.md)
+set_property PACKAGE_PIN T18 [get_ports btn_arriba]
+set_property IOSTANDARD LVCMOS33 [get_ports btn_arriba]
+set_property PACKAGE_PIN U17 [get_ports btn_abajo]
+set_property IOSTANDARD LVCMOS33 [get_ports btn_abajo]
+set_property PACKAGE_PIN W19 [get_ports btn_izq]
+set_property IOSTANDARD LVCMOS33 [get_ports btn_izq]
+set_property PACKAGE_PIN T17 [get_ports btn_der]
+set_property IOSTANDARD LVCMOS33 [get_ports btn_der]
+set_property PACKAGE_PIN U18 [get_ports btn_sel]
+set_property IOSTANDARD LVCMOS33 [get_ports btn_sel]
+## SW0
+set_property PACKAGE_PIN V17 [get_ports btn_ok]
+set_property IOSTANDARD LVCMOS33 [get_ports btn_ok]
+## SW15
+set_property PACKAGE_PIN R2 [get_ports btn_rst]
+set_property IOSTANDARD LVCMOS33 [get_ports btn_rst]
+
+## Puente USB-UART (PERIFERICO_UART.md)
+set_property PACKAGE_PIN B18 [get_ports rx_i]
+set_property IOSTANDARD LVCMOS33 [get_ports rx_i]
+set_property PACKAGE_PIN A18 [get_ports tx_o]
+set_property IOSTANDARD LVCMOS33 [get_ports tx_o]
+
+## Conector VGA (PERIFERICO_VGA.md)
+set_property PACKAGE_PIN G19 [get_ports {vga_r_o[0]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_r_o[0]}]
+set_property PACKAGE_PIN H19 [get_ports {vga_r_o[1]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_r_o[1]}]
+set_property PACKAGE_PIN J19 [get_ports {vga_r_o[2]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_r_o[2]}]
+set_property PACKAGE_PIN N19 [get_ports {vga_r_o[3]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_r_o[3]}]
+set_property PACKAGE_PIN J17 [get_ports {vga_g_o[0]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_g_o[0]}]
+set_property PACKAGE_PIN H17 [get_ports {vga_g_o[1]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_g_o[1]}]
+set_property PACKAGE_PIN G17 [get_ports {vga_g_o[2]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_g_o[2]}]
+set_property PACKAGE_PIN D17 [get_ports {vga_g_o[3]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_g_o[3]}]
+set_property PACKAGE_PIN N18 [get_ports {vga_b_o[0]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_b_o[0]}]
+set_property PACKAGE_PIN L18 [get_ports {vga_b_o[1]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_b_o[1]}]
+set_property PACKAGE_PIN K18 [get_ports {vga_b_o[2]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_b_o[2]}]
+set_property PACKAGE_PIN J18 [get_ports {vga_b_o[3]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {vga_b_o[3]}]
+set_property PACKAGE_PIN P19 [get_ports vga_hsync_o]
+set_property IOSTANDARD LVCMOS33 [get_ports vga_hsync_o]
+set_property PACKAGE_PIN R19 [get_ports vga_vsync_o]
+set_property IOSTANDARD LVCMOS33 [get_ports vga_vsync_o]
+
+## Display de 7 segmentos (PERIFERICO_7SEG.md), segmentos a hasta g
+set_property PACKAGE_PIN W7 [get_ports {seg[0]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg[0]}]
+set_property PACKAGE_PIN W6 [get_ports {seg[1]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg[1]}]
+set_property PACKAGE_PIN U8 [get_ports {seg[2]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg[2]}]
+set_property PACKAGE_PIN V8 [get_ports {seg[3]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg[3]}]
+set_property PACKAGE_PIN U5 [get_ports {seg[4]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg[4]}]
+set_property PACKAGE_PIN V5 [get_ports {seg[5]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg[5]}]
+set_property PACKAGE_PIN U7 [get_ports {seg[6]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {seg[6]}]
+set_property PACKAGE_PIN V7 [get_ports dp]
+set_property IOSTANDARD LVCMOS33 [get_ports dp]
+set_property PACKAGE_PIN U2 [get_ports {an[0]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {an[0]}]
+set_property PACKAGE_PIN U4 [get_ports {an[1]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {an[1]}]
+set_property PACKAGE_PIN V4 [get_ports {an[2]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {an[2]}]
+set_property PACKAGE_PIN W4 [get_ports {an[3]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {an[3]}]
+
+## LED de estado (PERIFERICO_LED.md)
+set_property PACKAGE_PIN U16 [get_ports {led[0]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {led[0]}]
+set_property PACKAGE_PIN E19 [get_ports {led[1]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {led[1]}]
+set_property PACKAGE_PIN U19 [get_ports {led[2]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {led[2]}]
+
+## Buzzer en JC2 (PERIFERICO_BUZZER.md)
+set_property PACKAGE_PIN M18 [get_ports buzzer]
+set_property IOSTANDARD LVCMOS33 [get_ports buzzer]
