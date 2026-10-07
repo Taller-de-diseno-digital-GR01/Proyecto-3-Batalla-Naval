@@ -95,7 +95,7 @@ SLICEM funcionando como memoria).
 
 La prueba de síntesis con openXC7 armó la RAM de 1024 × 32 con 176 primitivas `RAM64M` (o 128 `RAM256X1S`,
 según cómo le llegue la dirección), la colocó y la ruteó sin errores. La lectura, desde un registro de
-dirección hasta un registro de destino, cerró a 166 MHz, lejos de los 50 MHz objetivo de `clk_i`.
+dirección hasta un registro de destino, cerró a 166 MHz, lejos de los 33,33 MHz de `clk_i`.
 
 La escritura sí es síncrona. Es lo que permite usar LUTRAM, y además evita que una dirección todavía
 inestable durante el ciclo escriba en una palabra equivocada: el dato se guarda solo en el flanco, cuando todo

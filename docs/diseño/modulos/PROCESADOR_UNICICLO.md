@@ -35,7 +35,7 @@ periféricos y la memoria de video son lo mismo: direcciones a las que se les ha
 ## d) Entradas
 
 - `clk_i`, reloj del sistema, el mismo de las memorias y los periféricos de registros.
-- `rst_i`, reset síncrono, activo en alto. Sale de `~locked` del MMCM, sincronizado en `top.sv`.
+- `rst_i`, reset síncrono, activo en alto. Sale de `~locked` del PLL, sincronizado en `top.sv`.
 - `ProgIn_i[31:0]`, instrucción que entrega la ROM para la dirección `ProgAddress_o`.
 - `DataIn_i[31:0]`, dato leído por un `lw`, desde `MUX_LECTURA`.
 
@@ -179,8 +179,9 @@ La síntesis de `procesador_uniciclo` solo, con el mismo comando del `GNUmakefil
 -abc9 -nobram`), da unas 900 LUT, 12 `RAM32M`, 39 `CARRY4` y 32 flip-flops `FDRE` con reset síncrono (el
 `PC`), sin latches. El camino crítico
 de un uniciclo es el de un `lw`: `PC`, ROM, banco de registros, ALU, Address Translator, RAM o periférico,
-`MUX_LECTURA` y escritura en el banco. La frecuencia de `clk_i` se fija con el reporte de timing del sistema
-integrado. El objetivo es 50 MHz.
+`MUX_LECTURA` y escritura en el banco. Con el sistema integrado, nextpnr-xilinx da entre 39 y 50 MHz de
+máximo para `clk_i` según la colocación, así que `clk_i` es de 33,33 MHz (1000 / 30 del PLL), con unos 4 ns
+de holgura en el peor caso. La justificación completa está en `nivel02.md`, bloque 1.
 
 ### Latches
 
@@ -273,8 +274,8 @@ El procesador no tiene puertos hacia pines de la Basys 3, así que no agrega nad
 
 Conexiones en el top:
 
-- `clk_i`, a `clk_i` del sistema, que sale del MMCM.
-- `rst_i`, al reset del sistema, `~locked` del MMCM sincronizado.
+- `clk_i`, a `clk_sys`, el reloj del sistema de 33,33 MHz que sale del PLL.
+- `rst_i`, al reset del sistema, `~locked` del PLL sincronizado.
 - `ProgAddress_o`, a `addr_i` de la ROM.
 - `ProgIn_i`, a `instr_o` de la ROM.
 - `DataAddress_o`, a `address_i` del Address Translator, a `addr_i` de la RAM y a la dirección de cada

@@ -25,7 +25,7 @@ o cualquier otra cosa.
 
 ## d) Entradas
 
-- `clk`, reloj del sistema de 100 MHz.
+- `clk`, reloj del sistema de 33,33 MHz.
 - `rst`, reset síncrono.
 - `i_digitos[15:0]`, cuatro dígitos BCD empacados, `[3:0]` va al dígito de `AN0` y `[15:12]` al de `AN3`.
 - `i_puntos[3:0]`, un bit por dígito para el punto decimal, en alto enciende el punto.
@@ -47,8 +47,8 @@ periférico. Las tres salidas van directo a los pines del display de la Basys 3.
 ## g) Explicación de funcionamiento
 
 `CONT_REFRESCO` es un contador libre de 18 bits, y sus dos bits más altos forman `selector`. Cada valor de
-`selector` dura `2^16` ciclos, 655 µs, así que los cuatro dígitos se recorren cada 2.6 ms, unas 380 veces
-por segundo. Con eso no se nota el parpadeo.
+`selector` dura `2^16` ciclos, 1.97 ms a 33,33 MHz, así que los cuatro dígitos se recorren cada 7.9 ms,
+unas 127 veces por segundo. Con eso no se nota el parpadeo.
 
 `SELECTOR_DIGITO` usa `selector` para elegir el nibble de `i_digitos` y el bit de `i_puntos` que tocan,
 y baja el ánodo de ese dígito. `DECOD_BCD_7SEG` convierte el nibble al patrón de segmentos. Un nibble de 10

@@ -269,11 +269,13 @@ dónde puso sus barcos.
 Para mover el cursor o la vista previa, el programa repinta el tablero completo desde la RAM
 (`REPINTAR_TABLERO`) y después dibuja el cursor encima (`DIBUJAR_CURSOR`). Es más simple que
 recordar qué casillas tapaba el cursor anterior. Repintar 64 casillas son 3365 instrucciones,
-67 µs a 50 MHz (la frecuencia prevista para `clk_i`). La vuelta más larga que no transmite es la
-de un `BTN_OK` válido del Jugador 1 (validar, colocar, repintar, vista previa y HUD), con unas
-3700 instrucciones, 74 µs. Tiene que quedar por debajo de los 87 µs que tarda en llegar un byte
-por la UART, porque el periférico guarda un solo byte recibido. El margen es chico: a 25 MHz esa
-vuelta tardaría unos 148 µs y un byte de una trama de la PC se podría perder. Si el barrido del VGA pasa por el tablero justo durante el repintado, la casilla del
+101 µs con `clk_i` de 33,33 MHz. La vuelta más larga que no lee la UART es la de un `BTN_OK`
+válido del Jugador 1 (validar, colocar, repintar, vista previa y HUD), con unas 3700
+instrucciones, 111 µs. El periférico guarda un solo byte recibido y a 115200 baudios un byte llega
+cada 87 µs, así que con bytes pegados un byte de una trama de la PC se podría perder. Por eso la
+aplicación de PC deja 1 ms entre los bytes de una trama (`ESPACIO_ENTRE_BYTES` en
+`sw/enlace.py`), unas nueve veces la vuelta más larga. Una trama de pocos bytes tarda unos
+milisegundos más en llegar, algo que no se percibe. Si el barrido del VGA pasa por el tablero justo durante el repintado, la casilla del
 cursor se ve en su color de fondo durante un cuadro, algo que no se percibe.
 
 ### 4.4. Privacidad

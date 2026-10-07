@@ -46,8 +46,8 @@ repo, porque la sección 4.5.5 los nombra así y la interfaz es de cumplimiento 
 
 El módulo está parametrizado con `WIDTH = 32`, `CLK_FREQ_HZ = 100_000_000` y `BAUDIOS = 115200`.
 De los dos últimos salen `TICKS_BIT` y `TICKS_X16`, que son `localparam` y se le pasan a los núcleos.
-Si `clk_i` deja de ser de 100 MHz basta con cambiar `CLK_FREQ_HZ` al instanciar, y en simulación se
-baja para no esperar 8680 ciclos por byte.
+El top lo instancia con `CLK_FREQ_HZ = 33_333_333`, la frecuencia de `clk_i`, y en simulación se
+baja para no esperar miles de ciclos por byte.
 
 ## e) Salidas
 
@@ -187,6 +187,10 @@ Los dos divisores se calculan redondeando al entero más cercano, `TICKS_BIT` co
 por debajo de 0.3% de error, pero el divisor del receptor se hace chico y el redondeo pesa más.
 
 - 50 MHz, `TICKS_X16 = 27`, 0.47% de error, igual que a 100 MHz.
+- 33.33 MHz, la frecuencia de `clk_i` en el top. `TICKS_BIT = 289` (289.35 exacto, 0.12% en el
+  transmisor) y `TICKS_X16 = 18` (18.08 exacto, 0.47% en el receptor). El último bit de datos se
+  muestrea a `136 x 18 = 2448` ciclos del flanco, contra un centro real en `8.5 x 289.35 = 2459`.
+  Son 11 ciclos de desfase contra los 145 de medio bit, el mismo margen relativo que a 100 MHz.
 - 20 MHz, `TICKS_X16 = 11`, 1.4%.
 - 25 MHz, `TICKS_X16 = 14`, 3.1%. El último bit de datos se muestrea con un 27% de bit de desfase,
   todavía cae dentro del bit pero con poco margen.
@@ -250,7 +254,7 @@ que tienen que quedar en `src/fpga/basys3.xdc` cuando se arme:
 
 Conexiones en el top:
 
-- `clk_i`, al reloj global de 100 MHz, pin W5.
+- `clk_i`, a `clk_sys`, el reloj del sistema de 33,33 MHz que sale del PLL.
 - `rst_i`, al reset del sistema.
 - `write_enable_i`, a `uart_we` del controlador de mapeo, en alto solo cuando `we_o` está en alto y
   `DataAddress_o` es `0x0001_0040`, `0x0001_0044` o `0x0001_0048`.

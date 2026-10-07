@@ -15,7 +15,7 @@ flowchart LR
     IN_BUS(["write_enable_i, addr_i[8:0], wdata_i[31:0]<br/>(del controlador de mapeo)"]) --> MEM["MEMORIA_VIDEO<br/>RAM distribuida doble puerto 512 × 32"]
     MEM --> OUT_RD(["rdata_o[31:0]<br/>(a MUX_LECTURA)"])
 
-    IN_PIX(["clk_pix_i 25 MHz<br/>(del MMCM)"]) --> SYNC["GENERADOR_SINCRONISMOS<br/>contadores H/V + comparadores"]
+    IN_PIX(["clk_pix_i 25 MHz<br/>(del PLL)"]) --> SYNC["GENERADOR_SINCRONISMOS<br/>contadores H/V + comparadores"]
     SYNC -->|"h_count, v_count"| IDX["CALCULO_INDICE<br/>fila·20 + col"]
     IDX -->|"indice_pix[8:0]"| MEM
     MEM -->|"color[2:0]"| PAL["PALETA<br/>3 bits → RGB444"]
@@ -46,8 +46,8 @@ el programa escribió en su palabra, 60 veces por segundo, y nada más.
   periférico no depende de su frecuencia.
 - `rst_i`, reinicio del sistema. Solo reinicia la lógica de barrido; no borra la memoria de video.
   Tiene que durar al menos dos periodos de `clk_pix_i` (80 ns) para que el sincronizador lo vea;
-  el reinicio del botón y el `locked` del MMCM duran mucho más que eso.
-- `clk_pix_i`, reloj de píxel de 25 MHz, desde el MMCM del top.
+  el reinicio del botón y el `locked` del PLL duran mucho más que eso.
+- `clk_pix_i`, reloj de píxel de 25 MHz, desde el PLL del top.
 - `write_enable_i`, habilitación de escritura, desde el controlador de mapeo (`we_o && sel_vga`).
 - `addr_i[8:0]`, índice de palabra, desde el controlador de mapeo (`DataAddress_o[10:2]`).
 - `wdata_i[31:0]`, palabra de la casilla, desde el controlador de mapeo (`DataOut_o`).
@@ -75,7 +75,7 @@ Hacia adentro del sistema habla con el **controlador de mapeo**. El controlador 
 al `MUX_LECTURA` del controlador y de ahí a `DataIn_i` del procesador. El VGA no necesita árbitro
 porque el procesador es su único maestro.
 
-Recibe `clk_pix_i` del **MMCM** del top, que también genera el reloj del sistema, así que los dos
+Recibe `clk_pix_i` del **PLL** del top, que también genera el reloj del sistema, así que los dos
 relojes están relacionados en fase.
 
 Hacia afuera es el único módulo conectado al conector VGA.
@@ -94,7 +94,7 @@ La división de trabajo con el programa en ensamblador es:
 
 El periférico tiene dos lados que solo comparten la memoria de video.
 
-**Lado del CPU (100 MHz).** Para pintar una casilla, el programa calcula
+**Lado del CPU (33,33 MHz).** Para pintar una casilla, el programa calcula
 `0x0001_1000 + (fila × 20 + col) × 4` y ejecuta un `sw`. La palabra queda guardada en el mismo
 ciclo, sin bits de `start` ni espera de `busy`, como pide el enunciado. Borrar la pantalla es un
 lazo de software que escribe el color de fondo en las 300 casillas.
@@ -349,9 +349,9 @@ Este módulo tiene puertos físicos propios, así que lleva restricciones de pin
 
 Conexiones propuestas en `src/design/top.sv`, instancia `u_periferico_vga`:
 
-- `clk_i`, al reloj del sistema que entrega el MMCM a partir del oscilador de 100 MHz (pin W5).
-- `clk_pix_i`, a la salida de 25 MHz del mismo MMCM.
-- `rst_i`, al reinicio general del sistema, combinado con `locked` del MMCM.
+- `clk_i`, a `clk_sys`, el reloj del sistema de 33,33 MHz que entrega el PLL a partir del oscilador de 100 MHz (pin W5).
+- `clk_pix_i`, a `clk_pix`, la salida de 25 MHz del mismo PLL.
+- `rst_i`, al reinicio general del sistema, `~locked` del PLL sincronizado.
 - `write_enable_i`, `addr_i[8:0]`, `wdata_i[31:0]`, desde el controlador de mapeo.
 - `rdata_o[31:0]`, hacia `MUX_LECTURA` del controlador de mapeo.
 - `vga_r_o`, `vga_g_o`, `vga_b_o`, `vga_hsync_o`, `vga_vsync_o`, a los puertos del top con el

@@ -95,6 +95,6 @@ set_property IOSTANDARD LVCMOS33 [get_ports {led[1]}]
 set_property PACKAGE_PIN U19 [get_ports {led[2]}]
 set_property IOSTANDARD LVCMOS33 [get_ports {led[2]}]
 
-## Buzzer en JC2 (PERIFERICO_BUZZER.md)
+## Buzzer en JC4 (PERIFERICO_BUZZER.md)
 set_property PACKAGE_PIN P18 [get_ports buzzer]
 set_property IOSTANDARD LVCMOS33 [get_ports buzzer]

@@ -49,7 +49,7 @@ flowchart LR
 ### Entradas
 
 - `clk`, reloj de 100 MHz de la Basys 3, pin W5. Es el único reloj que entra al sistema.
-- PROG, reinicio general del hardware. Es el botón PROG de la Basys 3, que vuelve a configurar la FPGA con el bitstream guardado en la flash. Adentro `rst_i` sale de `locked` del MMCM. Es lo único que pone en cero las partidas ganadas.
+- PROG, reinicio general del hardware. Es el botón PROG de la Basys 3, que vuelve a configurar la FPGA con el bitstream guardado en la flash. Adentro `rst_i` sale de `locked` del PLL. Es lo único que pone en cero las partidas ganadas.
 - `BTN_ARRIBA`, `BTN_ABAJO`, `BTN_IZQ`, `BTN_DER`, navegación del cursor del Jugador 1, en `btnU`, `btnD`, `btnL` y `btnR` de la Basys 3.
 - `BTN_SEL`, rota la orientación del barco que se está colocando, en `btnC`.
 - `BTN_OK`, confirma una colocación o un disparo, en el switch SW0.
@@ -64,7 +64,7 @@ La Basys 3 trae cinco botones y el enunciado pide siete entradas, por eso `BTN_O
 - `vgaRed[3:0]`, `vgaGreen[3:0]`, `vgaBlue[3:0]`, `Hsync`, `Vsync`, conector VGA de la Basys 3. Muestra al Jugador 1 sus barcos, los resultados conocidos sobre el rival y la fase del juego.
 - `seg[6:0]`, `an[3:0]`, `dp`, los cuatro dígitos de 7 segmentos con las partidas ganadas por cada jugador.
 - `led[2:0]`, LD0 a LD2, un LED por fase, colocación, batalla y resultado.
-- `buzzer`, onda cuadrada para los cinco sonidos del enunciado, en JC2 del Pmod JC.
+- `buzzer`, onda cuadrada para los cinco sonidos del enunciado, en JC4 del Pmod JC (pin P18).
 
 La aplicación de PC es un elemento externo. Presenta al Jugador 2 su tablero, los resultados de sus disparos y el estado de la partida, sin reglas propias.
 

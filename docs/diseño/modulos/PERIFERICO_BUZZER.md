@@ -12,7 +12,7 @@ flowchart LR
     IN_ADDR(["addr_i[1:0]<br/>(2'b00 fijo)"]) --> PBUZ
     IN_WD(["wdata_i[31:0]<br/>(DataOut_o)"]) --> PBUZ
     PBUZ --> OUT_RD(["rdata_o[31:0]<br/>(MUX_LECTURA)"])
-    PBUZ --> OUT_BUZ(["buzzer_o<br/>(pin M18, JC2)"])
+    PBUZ --> OUT_BUZ(["buzzer_o<br/>(pin P18, JC4)"])
 ```
 
 Es el bloque `PERIFERICO_BUZZER` del nivel 2 visto desde afuera. Lo que tiene adentro está en el
@@ -37,7 +37,8 @@ Decidir que un disparo fue impacto, o que el impacto hundió un barco, es trabaj
 - `wdata_i[WIDTH-1:0]`, dato a escribir, desde `DataOut_o` del CPU.
 
 El módulo tiene los parámetros `WIDTH = 32`, `CLK_FREQ_HZ = 100_000_000` y `UNIDAD_MS = 50`. Los dos
-últimos pasan tal cual a `SECUENCIADOR_MELODIA`.
+últimos pasan tal cual a `SECUENCIADOR_MELODIA`. El top lo instancia con `CLK_FREQ_HZ = 33_333_333`, la
+frecuencia de `clk_i`.
 
 ## e) Salidas
 
@@ -150,12 +151,12 @@ caja a la otra, y los bits de más de `rdata_o` serían ceros constantes.
 Es el único módulo con puerto hacia el buzzer, así que acá va la restricción de pin que tiene que
 quedar en `src/fpga/basys3.xdc`.
 
-- `buzzer_o`, al pin M18, JC2 del Pmod JC, el mismo del Proyecto 2.
+- `buzzer_o`, al pin P18, JC4 del Pmod JC.
 - `IOSTANDARD LVCMOS33`.
 
 Conexiones en el top.
 
-- `clk_i`, al reloj global de 100 MHz, pin W5.
+- `clk_i`, a `clk_sys`, el reloj del sistema de 33,33 MHz que sale del PLL.
 - `rst_i`, al reset del sistema.
 - `write_enable_i`, a `buzzer_we` del controlador de mapeo, en alto solo cuando `we_o` está en alto y
   `DataAddress_o` es `0x0001_0140`.
