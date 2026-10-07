@@ -12,6 +12,7 @@ FIN_DE_ARCHIVO = "\x04"  # Ctrl-D
 
 # Las flechas llegan como ESC [ letra, o ESC O letra si la terminal está en modo aplicación
 FLECHAS = {"A": (-1, 0), "B": (1, 0), "C": (0, 1), "D": (0, -1)}
+VIM = {"k": (-1, 0), "j": (1, 0), "l": (0, 1), "h": (0, -1)}
 
 
 @contextmanager
@@ -34,7 +35,7 @@ def leer_tecla(flujo=sys.stdin):
 
 
 def flecha(tecla):
-    """(dfila, dcolumna) si la tecla es una flecha, si no None."""
+    """(dfila, dcolumna) si la tecla es una flecha o hjkl, si no None."""
     if len(tecla) == 3 and tecla[0] == ESCAPE and tecla[1] in "[O":
         return FLECHAS.get(tecla[2])
-    return None
+    return VIM.get(tecla.lower())
