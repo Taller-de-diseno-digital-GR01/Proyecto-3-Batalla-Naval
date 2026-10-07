@@ -143,7 +143,7 @@ reinicio. Dejar SW15 arriba reinicia la partida una sola vez.
 
 ### Reset y BTN_RST
 
-`rst_i` es el reinicio general y sale de `locked` del MMCM negado, así que está en alto desde que la FPGA se
+`rst_i` es el reinicio general y sale de `locked` del PLL negado, así que está en alto desde que la FPGA se
 configura hasta que el reloj engancha. Para dispararlo a mano se usa el botón PROG de la Basys 3, que vuelve
 a configurar la FPGA con el bitstream guardado en la flash. Hace falta el jumper JP1 en QSPI.
 
@@ -196,8 +196,8 @@ quedar en `src/fpga/basys3.xdc`.
 
 Conexiones en el top.
 
-- `clk_i`, al reloj global de 100 MHz, pin W5.
-- `rst_i`, a `locked` del MMCM negado, nunca a `BTN_RST`.
+- `clk_i`, a `clk_sys`, el reloj del sistema de 33,33 MHz que sale del PLL.
+- `rst_i`, a `locked` del PLL negado, nunca a `BTN_RST`.
 - `write_enable_i`, a `gpio_we` del controlador de mapeo, que siempre vale cero.
 - `addr_i[1:0]`, a `2'b00`.
 - `wdata_i[31:0]`, a `DataOut_o`.

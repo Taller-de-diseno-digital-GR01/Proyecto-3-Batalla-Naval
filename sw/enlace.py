@@ -9,7 +9,7 @@ from serial.tools import list_ports
 BAUDIOS = 115200
 VID_FTDI = 0x0403
 PID_FT2232 = 0x6010
-# El periférico guarda un solo byte y la vuelta más larga del programa a 25 MHz tarda unos 148 µs sin leer la UART, 1 ms deja margen para el jitter del USB
+# El periférico guarda un solo byte y la vuelta más larga del programa a 33,33 MHz tarda unos 111 µs sin leer la UART, 1 ms deja margen para el jitter del USB
 ESPACIO_ENTRE_BYTES = 0.001
 
 

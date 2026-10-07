@@ -8,7 +8,7 @@ module periferico_vga #(parameter WIDTH = 32) (
   input logic [WIDTH-1:0] wdata_i,
   output logic [WIDTH-1:0] rdata_o,
 
-  input logic clk_pix_i, // 25 MHz desde el MMCM del top
+  input logic clk_pix_i, // 25 MHz desde el PLL del top
   output logic vga_hsync_o,
   output logic vga_vsync_o,
   output logic [3:0] vga_r_o,

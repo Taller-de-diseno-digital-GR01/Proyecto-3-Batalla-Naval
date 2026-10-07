@@ -23,12 +23,14 @@ reloj de 16 MHz.
 
 ## d) Entradas
 
-- `clk`, reloj del sistema de 100 MHz.
+- `clk`, reloj del sistema de 33,33 MHz.
 - `rst`, reset síncrono.
 - `i_enviar`, orden de arranque. En este sistema llega sostenida desde el bit `send` de `REG_CONTROL`.
 - `i_dato[7:0]`, byte a mandar, desde `REG_DATOS_TX`.
 
-El módulo tiene el parámetro `TICKS_BIT = 868`, ciclos de reloj por bit.
+El módulo tiene el parámetro `TICKS_BIT = 868`, ciclos de reloj por bit, calculado para 100 MHz. En el
+top `PERIFERICO_UART` le pasa `TICKS_BIT = 289`, que sale de `clk_i` de 33,33 MHz. Los números de
+los incisos g) y h) son los del valor por defecto, y el cálculo a 33,33 MHz está en `PERIFERICO_UART.md`.
 
 ## e) Salidas
 
