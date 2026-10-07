@@ -1,8 +1,9 @@
 # PERIFERICO_VGA
 
-> **Estado:** implementado en `src/design/periferico_vga.sv` y verificado con
-> `src/sim/tb_periferico_vga.sv` (26 pruebas, ver Verificación). Todavía no está instanciado en un
-> `top.sv`.
+> **Estado:** implementado en `src/design/periferico_vga.sv`, con la fuente de caracteres en
+> `src/design/fuente_caracteres.sv` ([`FUENTE_CARACTERES.md`](FUENTE_CARACTERES.md)). Verificado con
+> `src/sim/tb_periferico_vga.sv` (28 pruebas) y dentro del sistema completo con `src/sim/tb_top.sv`.
+> Instanciado en `src/design/top.sv` y probado en la Basys 3.
 
 ## a) Nombre del módulo
 
@@ -19,8 +20,13 @@ flowchart LR
     SYNC -->|"h_count, v_count"| IDX["CALCULO_INDICE<br/>fila·20 + col"]
     IDX -->|"indice_pix[8:0]"| MEM
     MEM -->|"color[2:0]"| PAL["PALETA<br/>3 bits → RGB444"]
-    SYNC -->|"hsync_n, vsync_n, video_on"| RET["REGISTRO_RETARDO"]
-    PAL --> SAL["BLANKING + REGISTRO_SALIDA"]
+    MEM -->|"caracter[5:0]"| FUE["FUENTE_CARACTERES<br/>5 × 7, ASCII 0x20-0x5F"]
+    MEM -->|"borde"| SEL
+    SYNC -->|"hsync_n, vsync_n, video_on,<br/>posición en la casilla"| RET["REGISTRO_RETARDO"]
+    PAL --> SEL["SELECTOR DE PIXEL<br/>línea / texto / color"]
+    FUE --> SEL
+    SEL --> SAL["BLANKING + REGISTRO_SALIDA"]
+    RET --> SEL
     RET --> SAL
     SAL --> OUT_VGA(["vga_r_o, vga_g_o, vga_b_o<br/>vga_hsync_o, vga_vsync_o (a conector VGA)"])
 ```
@@ -35,8 +41,9 @@ A diferencia de los demás periféricos no tiene registros de control: se compor
 **memoria de video** mapeada en `0x0001_1000`–`0x0001_17FF`, con una palabra de 32 bits por
 casilla de una cuadrícula de 20 × 15 casillas de 32 × 32 píxeles (sección 4.5.1 del enunciado).
 
-No sabe nada del juego. No conoce tableros, turnos ni barcos. Pinta en cada casilla el color que
-el programa escribió en su palabra, 60 veces por segundo, y nada más.
+No sabe nada del juego. No conoce tableros, turnos ni barcos. Pinta en cada casilla lo que el
+programa escribió en su palabra, 60 veces por segundo, y nada más: un color de fondo, si lleva o no
+la línea del grid y, si se pidió, una letra o un número encima.
 
 ---
 
@@ -82,11 +89,15 @@ Hacia afuera es el único módulo conectado al conector VGA.
 
 La división de trabajo con el programa en ensamblador es:
 
-- El **programa** decide **qué** se ve: qué color va en cada casilla, dónde está el cursor, qué
-  muestra el HUD, y en particular que nunca se escriba el color de barco en las casillas del
-  tablero del Jugador 2.
+- El **programa** decide **qué** se ve: qué color y qué letra van en cada casilla, cuáles llevan
+  la línea del grid, dónde está el cursor, qué dice el HUD, y en particular que nunca se escriba el
+  color de barco en las casillas del tablero del Jugador 2.
 - El **periférico** decide **cómo** se ve: temporización, barrido, conversión del código de color
-  a RGB y *blanking*.
+  a RGB, la forma de las letras, el grosor de la línea y *blanking*.
+
+Para cambiar la distribución de la pantalla, los textos o qué color significa qué, se cambia el
+programa. Para cambiar un color de la paleta, la forma de una letra o agregar un carácter, se
+cambia el periférico.
 
 ---
 
@@ -101,8 +112,11 @@ lazo de software que escribe el color de fondo en las 300 casillas.
 
 **Lado del monitor (25 MHz).** Dos contadores recorren sin parar las 800 × 525 posiciones de un
 cuadro, incluidas las de borrado. En cada ciclo, la posición actual se convierte en el índice de
-su casilla y se lee esa palabra de la memoria. El código de color pasa por la paleta y sale hacia
-los pines junto con los sincronismos. Fuera del área visible la salida se fuerza a negro.
+su casilla y se lee esa palabra de la memoria. Con la palabra y la posición del píxel dentro de la
+casilla se decide el color del píxel: negro si cae en el contorno de una casilla con borde, el
+color del texto si cae en un punto encendido de la letra, y si no el color de fondo de la casilla
+pasado por la paleta. Sale hacia los pines junto con los sincronismos. Fuera del área visible la
+salida se fuerza a negro.
 
 Un cambio escrito por el CPU aparece en pantalla en el siguiente cuadro, a lo sumo 16,7 ms
 después. Para la percepción del jugador es instantáneo.
@@ -115,12 +129,19 @@ después. Para la percepción del jugador es instantáneo.
 
 | Bits | Nombre | Uso |
 |---|---|---|
-| `[2:0]` | `color` | Código de color de la casilla, entra a la paleta |
-| `[7:3]` | — | Reservado. Queda disponible para códigos de carácter si se agrega texto al HUD |
-| `[31:8]` | — | Reservado. Se escribe en 0 |
+| `[2:0]` | `color` | Color de fondo de la casilla, entra a la paleta |
+| `[3]` | `borde` | En 1, la casilla lleva una línea negra de 1 píxel en su contorno |
+| `[9:4]` | `caracter` | Letra o número que se dibuja encima, en ASCII − 32. `0` es espacio, sin carácter |
+| `[31:10]` | — | Reservado. Se escribe en 0 |
 
 Los bits reservados se guardan en la memoria (se leen de vuelta con `lw`) pero el barrido los
-ignora.
+ignora. Una palabra con solo `color`, como las que escribía el programa antes del borde y el texto,
+se sigue viendo como un bloque de color sólido.
+
+El enunciado sugiere los bits `[7:3]` para códigos de carácter. Se usan `[9:4]` porque 5 bits dan
+32 símbolos y el HUD necesita 36 (letras y dígitos), y porque así el bit 3 queda para el borde.
+Con el código en ASCII − 32 el ensamblador calcula los códigos sin tabla ('A' − 32 = 33) y la
+palabra completa sigue debajo de 2048, así que el programa la carga con un solo `addi`.
 
 ### Paleta (propuesta)
 
@@ -138,6 +159,10 @@ ignora.
 Los cuatro primeros son los que exige el enunciado. Los colores concretos pueden ajustarse al
 probar en el monitor sin cambiar nada más del diseño, salvo la copia de la paleta que tiene el
 testbench.
+
+El texto no tiene color propio. Sale en negro sobre los fondos claros (`011` blanco, `100`
+amarillo, `110` verde) y en blanco sobre el resto, así siempre contrasta con su casilla y el
+programa no gasta bits en elegirlo.
 
 Los códigos `000` a `011` coinciden con los estados de casilla que el programa guarda en RAM (bits
 `[1:0]`, ver [`nivel03.md`](../diagramas/nivel03.md)), y el programa pinta el tablero propio
@@ -181,19 +206,71 @@ Se usa la cuadrícula de 20 × 15 casillas de 32 × 32 píxeles que sugiere el e
 - **No necesita divisor.** Dividir entre 32 es tomar los bits altos de cada contador:
   `col = h_count[9:5]` (0–19) y `fila = v_count[8:5]` (0–14).
 - **Alcanza para el juego.** Los dos tableros de 8 × 8 ocupan 16 columnas; quedan 4 columnas para
-  bordes y separación, y 7 filas para el HUD.
+  los números de fila y la separación, y 7 filas para el HUD.
 
-Distribución propuesta de la pantalla:
+Distribución de la pantalla que usa el programa (la decide el programa, no el periférico):
 
 ```
-col:   0   1 ........ 8   9  10  11 ....... 18  19
-fila 0      HUD: fase de la partida
-fila 1      HUD: turno activo (colores 110 / 111)
-fila 2
-fila 3-10  borde  tablero J1 (propio)  sep.  tablero J2 (rival)  borde
+col:      0   1 ........ 8   9  10  11 ....... 18  19
+fila 0        JUGADOR1              JUGADOR2              títulos
+fila 1        barras de estado: COLOCA / LISTO, TURNO JUGADOR n, FIN DE LA PARTIDA
+fila 2        A B C D E F G H       A B C D E F G H        letras de columna
+fila 3-10 1-8 tablero J1 (propio)  1-8 tablero J2 (rival)  con borde
 fila 11
-fila 12-14  HUD: resultado de la partida
+fila 12       mensaje de traspaso: COLOQUEN SUS BARCOS / USE FLECHAS Y SW0 / ESPERANDO A LA PC
+fila 13
+fila 14       GANADAS J1 00 J2 00
 ```
+
+Al terminar la partida las filas 11 a 13 se pintan del color del ganador, con
+`GANA EL JUGADOR n` y `SW15 NUEVA PARTIDA`. El detalle está en
+[`PROGRAMA.md`](PROGRAMA.md).
+
+### Borde de casilla
+
+Una casilla con `borde = 1` lleva negro en su primer y último píxel de cada eje. Como
+dividir entre 32 es tomar los bits altos, la posición dentro de la casilla son los 5 bits bajos de
+los contadores:
+
+```
+en_contorno = (h_count[4:0] == 0) | (h_count[4:0] == 31) | (v_count[4:0] == 0) | (v_count[4:0] == 31)
+```
+
+Cada casilla dibuja su propio contorno, así que entre dos casillas con borde la línea queda de
+2 píxeles y en el contorno exterior de un tablero de 1. El programa lo enciende en las 128 casillas
+de los tableros y lo deja apagado en el HUD, por eso los tableros se ven como un grid y el resto
+de la pantalla no.
+
+### Caracteres
+
+Cada casilla se divide en una cuadrícula de 8 × 8 celdas de 4 × 4 píxeles:
+
+```
+glifo_col  = h_count[4:2]   (0-7)
+glifo_fila = v_count[4:2]   (0-7)
+```
+
+El glifo de 5 × 7 de [`FUENTE_CARACTERES`](FUENTE_CARACTERES.md) ocupa las columnas 1 a 5 y las filas
+0 a 6, es decir 20 × 28 píxeles. La columna 0 y las columnas 6 y 7 quedan vacías, y la fila 7
+también, así que dos letras en casillas vecinas quedan separadas y se leen como una palabra. El
+píxel es de texto cuando
+
+```
+pixel_texto = (1 <= glifo_col <= 5) & bits_glifo[5 - glifo_col]
+```
+
+donde `bits_glifo` es la fila `glifo_fila` del carácter `caracter`. Con `caracter = 0` (espacio) la
+fuente da todo en cero y la casilla queda de su color.
+
+### Prioridad del píxel
+
+En el área visible, de mayor a menor prioridad:
+
+1. Contorno de una casilla con borde → `0x000`.
+2. Punto encendido de la letra → `0x000` sobre fondo claro, `0xFFF` sobre el resto.
+3. Color de fondo de la casilla por la paleta.
+
+Fuera del área visible, `0x000`.
 
 ### Cálculo del índice
 
@@ -214,7 +291,7 @@ dos de lectura:
 | Puerto | Reloj | Acceso | Señales |
 |---|---|---|---|
 | A | `clk_i` | escritura síncrona, lectura combinacional | `write_enable_i`, `addr_i`, `wdata_i`, `rdata_o` |
-| B | `clk_pix_i` | solo lectura, registrada en `color` | `indice_pix`, `color` |
+| B | `clk_pix_i` | solo lectura, registrada en `color`, `borde` y `caracter` | `indice_pix`, `color`, `borde`, `caracter` |
 
 El puerto A se lee de forma combinacional porque así lee el núcleo su RAM de datos. El procesador
 es el núcleo de ciclo único de riscv-simple-sv, cuya memoria de ejemplo (`example_data_memory`)
@@ -248,12 +325,15 @@ lo mismo para que lleguen alineadas con su color:
 
 | Ciclo de `clk_pix_i` | Camino de color | Camino de control |
 |---|---|---|
-| t | contadores → `indice_pix` | contadores → `hsync_n`, `vsync_n`, `video_on` |
-| t + 1 | el registro del puerto B entrega `color` → paleta → *blanking* | `REGISTRO_RETARDO` entrega `*_d` |
+| t | contadores → `indice_pix` | contadores → `hsync_n`, `vsync_n`, `video_on`, `en_contorno`, `h_count[4:2]`, `v_count[4:2]` |
+| t + 1 | el registro del puerto B entrega `color`, `borde` y `caracter` → paleta, fuente, selector de píxel → *blanking* | `REGISTRO_RETARDO` entrega `*_d` |
 | t + 2 | `REGISTRO_SALIDA` → `vga_r/g/b_o` | `REGISTRO_SALIDA` → `vga_hsync_o`, `vga_vsync_o` |
 
 Los dos caminos tienen la misma latencia de 2 ciclos. Sin `REGISTRO_RETARDO` la imagen quedaría
-corrida un píxel respecto a los sincronismos. `REGISTRO_SALIDA` además evita que los *glitches*
+corrida un píxel respecto a los sincronismos, y la línea y las letras un píxel respecto a su
+casilla. La fuente es combinacional y entra en el ciclo t + 1 con el resto del selector, así que
+el borde y el texto no agregan latencia. Con el sistema integrado `clk_pix` cierra arriba de
+100 MHz contra los 25 MHz que necesita. `REGISTRO_SALIDA` además evita que los *glitches*
 de la paleta y el multiplexor lleguen a los pines.
 
 ### Lectura desde el CPU
@@ -265,10 +345,11 @@ depende de leer la memoria de video.
 
 ### Latches
 
-La paleta, el cálculo del índice, los comparadores y el *blanking* son `always_comb` o `assign`
-con todas sus salidas asignadas en cada camino (la paleta con un `case` completo de 8 entradas).
-Los contadores y los registros de retardo y salida están en `always_ff` con reinicio síncrono por
-`rst_pix`; el registro `color` y los del sincronizador no lo necesitan. La síntesis con yosys no
+La paleta, el cálculo del índice, los comparadores, el selector de píxel y el *blanking* son
+`always_comb` o `assign` con todas sus salidas asignadas en cada camino (la paleta con un `case`
+completo de 8 entradas, la fuente con `default`). Los contadores y los registros de retardo y
+salida están en `always_ff` con reinicio síncrono por `rst_pix`; los registros `color`, `borde` y
+`caracter` y los del sincronizador no lo necesitan. La síntesis con yosys no
 reporta ningún `Latch inferred`.
 
 ---
@@ -303,13 +384,27 @@ flowchart LR
     SUM1 --> SUM2
     SUM2 -->|"indice_pix[8:0]"| MEM
 
-    AND_VO -.->|"video_on"| REG_RET["REG retardo<br/>3 bits"]
+    AND_VO -.->|"video_on"| REG_RET["REG retardo<br/>10 bits"]
     NOT_H -.->|"hsync_n"| REG_RET
     NOT_V -.->|"vsync_n"| REG_RET
 
-    MEM -->|"puerto B, bits [2:0]"| REG_COL["REG color<br/>3 bits"]
+    CH -->|"h_count[4:0]"| CMP_CT{"CMP<br/>contorno 0 / 31"}
+    CV -->|"v_count[4:0]"| CMP_CT
+    CMP_CT -.->|"en_contorno"| REG_RET
+    CH -->|"h_count[4:2]"| REG_RET
+    CV -->|"v_count[4:2]"| REG_RET
+
+    MEM -->|"puerto B, bits [9:0]"| REG_COL["REG color, borde, caracter<br/>10 bits"]
     REG_COL -->|"color[2:0]"| MUX_PAL{{"MUX 8 a 1<br/>constantes RGB444"}}
-    MUX_PAL -->|"rgb[11:0]"| MUX_BLK{{"MUX 2 a 1<br/>rgb / 12'h000"}}
+    REG_COL -->|"caracter[5:0]"| FUE["FUENTE_CARACTERES<br/>ROM comb."]
+    REG_RET -->|"glifo_fila_d"| FUE
+    FUE -->|"bits_glifo[4:0]"| MUX_BIT{{"MUX 5 a 1<br/>por glifo_col_d"}}
+    REG_RET -->|"glifo_col_d"| MUX_BIT
+    MUX_BIT -.->|"pixel_texto"| MUX_SEL{{"MUX 3 a 1<br/>línea / texto / rgb"}}
+    REG_COL -.->|"borde"| MUX_SEL
+    REG_RET -.->|"en_contorno_d"| MUX_SEL
+    MUX_PAL -->|"rgb[11:0]"| MUX_SEL
+    MUX_SEL --> MUX_BLK{{"MUX 2 a 1<br/>/ 12'h000"}}
     REG_RET -.->|"video_on_d"| MUX_BLK
     MUX_BLK -->|"rgb_pix[11:0]"| REG_OUT["REG salida<br/>14 bits"]
     REG_RET -.->|"hsync_d, vsync_d"| REG_OUT
@@ -347,7 +442,7 @@ Este módulo tiene puertos físicos propios, así que lleva restricciones de pin
 | `vga_hsync_o` | P19 | `Hsync` |
 | `vga_vsync_o` | R19 | `Vsync` |
 
-Conexiones propuestas en `src/design/top.sv`, instancia `u_periferico_vga`:
+Conexiones en `src/design/top.sv`, instancia `u_periferico_vga`:
 
 - `clk_i`, a `clk_sys`, el reloj del sistema de 33,33 MHz que entrega el PLL a partir del oscilador de 100 MHz (pin W5).
 - `clk_pix_i`, a `clk_pix`, la salida de 25 MHz del mismo PLL.
@@ -357,4 +452,30 @@ Conexiones propuestas en `src/design/top.sv`, instancia `u_periferico_vga`:
 - `vga_r_o`, `vga_g_o`, `vga_b_o`, `vga_hsync_o`, `vga_vsync_o`, a los puertos del top con el
   mismo nombre.
 
+Adentro, `u_fuente` es la instancia de `fuente_caracteres`, con `codigo_i` en `caracter`,
+`fila_i` en `glifo_fila_d` y `bits_o` en `glifo_bits`.
 
+---
+
+## Verificación
+
+`src/sim/tb_periferico_vga.sv` corre el periférico solo, con los dos relojes a su frecuencia real,
+y compara **cada píxel de cuadros completos** contra un modelo que lleva el testbench aparte. El
+modelo guarda `[9:0]` de cada palabra escrita y calcula el píxel esperado con la misma prioridad
+de la sección h): contorno, texto, paleta. La paleta está escrita de nuevo a mano en el testbench.
+La fuente la lee una vez al arrancar de otra instancia de `fuente_caracteres`, para no copiarla, y
+se revisa aparte que la `A` coincida con su dibujo hecho a mano y que el espacio no dibuje nada.
+
+Entre las 28 pruebas están la temporización de `hsync` y `vsync`, la lectura combinacional del
+puerto A, un cuadro con un impacto en (3, 5) que tiene que ocupar exactamente
+`h = 160..191` y `v = 96..127`, un cuadro con los 8 colores y basura aleatoria en los bits `[31:3]`
+(eso enciende el borde en cerca de la mitad de las casillas y pone caracteres al azar en todas),
+escrituras a mitad de cuadro y un reinicio que no borra la memoria.
+
+`src/sim/tb_top.sv` lo prueba dentro del sistema completo con el programa real: que las 128
+casillas de los tableros lleven el borde y ninguna otra, y que los textos del HUD digan lo que
+tienen que decir en cada fase de una partida completa.
+
+En la Basys 3 se probó primero con `src/design/prueba_vga.sv`, un top sin procesador que llena la
+memoria con un patrón fijo (`make bitstream SYNTH_TOP=prueba_vga`), y después con el sistema
+completo.

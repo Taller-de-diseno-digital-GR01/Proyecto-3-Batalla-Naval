@@ -125,7 +125,7 @@ Este bloque corresponde al módulo que conecta al procesador (CPU) con el monito
 - **Selección:** el controlador compara `DataAddress_o[31:11]` con `0x00022` para obtener `sel_vga`, que cubre `0x0001_1000`–`0x0001_17FF`. La escritura se habilita con `write_enable_i = we_o && sel_vga`, y `DataAddress_o[10:2]` llega como `addr_i`.
 - **Memoria de video:** RAM distribuida de doble puerto de 512 × 32 bits, una palabra por casilla de una cuadrícula de 20 × 15 casillas de 32 × 32 píxeles. El puerto A atiende al CPU igual que la RAM de datos del núcleo: escribe en el flanco de `clk_i` y lee de forma combinacional, así un `lw` recibe el dato en el mismo ciclo. El puerto B lo lee el barrido de forma continua y registra el color con `clk_pix_i`.
 - **Barrido:** dos contadores (módulo 800 y módulo 525) y sus comparadores generan `hsync`, `vsync` y `video_on` para 640 × 480 a 60 Hz. El índice de la casilla es `fila × 20 + col`, con `col = h_count[9:5]` y `fila = v_count[8:5]`.
-- **Salida:** los bits `[2:0]` de la palabra pasan por una paleta a RGB444, se fuerzan a negro fuera del área visible y se registran junto con los sincronismos, que se retrasan lo mismo que la lectura del puerto B.
+- **Salida:** los bits `[2:0]` de la palabra son el color de fondo de la casilla y pasan por una paleta a RGB444. El bit `[3]` dibuja una línea negra en el contorno de la casilla (el grid de los tableros) y los bits `[9:4]` un carácter encima, en ASCII − 32, con la fuente de 5 × 7 de `FUENTE_CARACTERES`. El píxel se fuerza a negro fuera del área visible y se registra junto con los sincronismos, que se retrasan lo mismo que la lectura del puerto B.
 
 ## Programa en ensamblador
 
@@ -336,7 +336,7 @@ Mientras es el turno del Jugador 2, las tramas se siguen leyendo en cada vuelta 
 ```mermaid
 flowchart TD
     E(["Fin de partida"]) --> F["fase = resultado, LED = 10"]
-    F --> HUD["Pintar en el HUD el color del ganador"]
+    F --> HUD["HUD: franja del color del ganador<br/>con GANA EL JUGADOR n"]
     HUD --> BZ["Buzzer: victoria"]
     BZ --> M["ganadas_bcd del ganador + 1<br/>Escribir displays"]
     M --> U["UART: Estado fin con el ganador<br/>UART: Resumen"]

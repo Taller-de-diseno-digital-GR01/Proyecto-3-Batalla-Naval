@@ -41,6 +41,21 @@ module periferico_vga #(parameter WIDTH = 32) (
   localparam int BIT_BORDE = 3;
   localparam logic [RGB_WIDTH-1:0] LINEA_RGB = 12'h000;
 
+  // Texto encima del color de la casilla, en ASCII - 32 (0 es espacio, sin caracter). Glifos de 5 x 7 de
+  // fuente_caracteres ampliados x2, 10 x 14 pixeles, en la franja de las filas 10 a 23 de la casilla:
+  //   bits [9:4]   caracter de la mitad izquierda (pixeles 0 a 15 de la casilla)
+  //   bits [15:10] caracter de la mitad derecha (pixeles 16 a 31)
+  //   bit 16       centrado: dibuja solo el caracter de [9:4], en el centro de la casilla
+  // Dos caracteres por casilla dan 40 por fila de pantalla. El texto sale en negro sobre los fondos claros
+  // y en blanco sobre el resto
+  localparam int CAR_LSB = 4;
+  localparam int CAR_WIDTH = 6;
+  localparam int CAR2_LSB = 10;
+  localparam int BIT_CENTRADO = 16;
+  localparam logic [3:0] GLIFO_FILA0 = 4'd5; // el glifo arranca en la fila de 2 pixeles 5, pixel 10 de la casilla
+  localparam logic [RGB_WIDTH-1:0] TEXTO_CLARO = 12'hFFF;
+  localparam logic [RGB_WIDTH-1:0] TEXTO_OSCURO = 12'h000;
+
   // ---------------------------------------------------------------- memoria de video
 
   // RAM distribuida y no BRAM, el puerto A se lee combinacional igual que la RAM de datos del nucleo uniciclo,
@@ -122,10 +137,16 @@ module periferico_vga #(parameter WIDTH = 32) (
   // Puerto B, dominio clk_pix_i, solo lectura y registrada. El registro es lo que lo deja sincronizado al reloj de pixel
   logic [COLOR_WIDTH-1:0] color;
   logic borde;
+  logic [CAR_WIDTH-1:0] caracter;
+  logic [CAR_WIDTH-1:0] caracter2;
+  logic centrado;
 
   always_ff @(posedge clk_pix_i) begin
     color <= memoria_video[indice_pix][COLOR_WIDTH-1:0];
     borde <= memoria_video[indice_pix][BIT_BORDE];
+    caracter <= memoria_video[indice_pix][CAR_LSB +: CAR_WIDTH];
+    caracter2 <= memoria_video[indice_pix][CAR2_LSB +: CAR_WIDTH];
+    centrado <= memoria_video[indice_pix][BIT_CENTRADO];
   end
 
   // Primer o ultimo pixel de la casilla en cualquiera de los dos ejes, son los 5 bits bajos de cada contador
@@ -139,6 +160,8 @@ module periferico_vga #(parameter WIDTH = 32) (
   logic hsync_d;
   logic vsync_d;
   logic en_contorno_d;
+  logic [3:0] celda_col_d; // columna y fila del pixel en la cuadricula de 16 x 16 de la casilla, 2 pixeles cada una
+  logic [3:0] celda_fila_d;
 
   always_ff @(posedge clk_pix_i) begin
     if (rst_pix) begin
@@ -146,14 +169,58 @@ module periferico_vga #(parameter WIDTH = 32) (
       hsync_d <= 1'b1;
       vsync_d <= 1'b1;
       en_contorno_d <= 1'b0;
+      celda_col_d <= '0;
+      celda_fila_d <= '0;
     end
     else begin
       video_on_d <= video_on;
       hsync_d <= hsync_n;
       vsync_d <= vsync_n;
       en_contorno_d <= en_contorno;
+      celda_col_d <= h_count[4:1];
+      celda_fila_d <= v_count[4:1];
     end
   end
+
+  // ---------------------------------------------------------------- caracter
+
+  logic [CAR_WIDTH-1:0] codigo;
+  logic [3:0] glifo_col; // columna del glifo, de 0 a 4 cuando el pixel cae sobre el
+  logic [3:0] glifo_fila;
+  logic en_col;
+  logic en_fila;
+  logic [4:0] glifo_bits;
+  logic pixel_texto;
+  logic fondo_claro;
+
+  // Cada mitad de la casilla son 8 celdas de 2 pixeles y el glifo ocupa las celdas 1 a 5 de su mitad.
+  // Centrado, el glifo ocupa las celdas 5 a 9 de la casilla entera, pixeles 10 a 19
+  always_comb begin
+    if (centrado) begin
+      codigo = caracter;
+      glifo_col = celda_col_d - 4'd5;
+    end
+    else begin
+      codigo = celda_col_d[3] ? caracter2 : caracter;
+      glifo_col = {1'b0, celda_col_d[2:0]} - 4'd1;
+    end
+  end
+
+  assign glifo_fila = celda_fila_d - GLIFO_FILA0;
+  assign en_col = (glifo_col <= 4'd4);   // la resta da la vuelta si la celda queda antes del glifo
+  assign en_fila = (glifo_fila <= 4'd6);
+
+  fuente_caracteres u_fuente (
+    .codigo_i (codigo),
+    .fila_i   (glifo_fila[2:0]),
+    .bits_o   (glifo_bits)
+  );
+
+  // La columna 0 del glifo es el bit 4 de la fila
+  assign pixel_texto = en_col && en_fila && glifo_bits[3'd4 - glifo_col[2:0]];
+
+  // Blanco (011), cursor amarillo (100) y verde (110) son claros, ahi el texto va en negro
+  assign fondo_claro = (color == 3'b011) || (color == 3'b100) || (color == 3'b110);
 
   // ----------------------------------------------------------------
   //paleta
@@ -180,6 +247,7 @@ module periferico_vga #(parameter WIDTH = 32) (
   always_comb begin
     if (!video_on_d) rgb_pix = '0;
     else if (borde && en_contorno_d) rgb_pix = LINEA_RGB;
+    else if (pixel_texto) rgb_pix = fondo_claro ? TEXTO_OSCURO : TEXTO_CLARO;
     else rgb_pix = rgb;
   end
 

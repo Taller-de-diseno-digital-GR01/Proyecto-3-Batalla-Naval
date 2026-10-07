@@ -33,8 +33,9 @@ El programa principal (partes 1 a 5) no es una subrutina: no se llama con `jal r
 ejecuta `ret`. Pasa de una fase a otra con saltos (`j`). Las subrutinas van todas juntas al
 final, así un error en el flujo principal no puede "caer" dentro de una subrutina.
 
-La ROM tiene 8 KB, o sea 2048 instrucciones. El programa completo (`sw/programa.s`) ocupa 725
-instrucciones, así que el tamaño no es una restricción.
+La ROM tiene 8 KB, o sea 2048 instrucciones. El programa completo (`sw/programa.s`) ocupa 1200
+instrucciones, así que el tamaño no es una restricción. Unas 470 son los textos del HUD, que
+cuestan dos instrucciones por letra (sección 4.5).
 
 ### 1.1. Instrucciones que usa
 
@@ -70,6 +71,13 @@ El programa se ensambla con binutils de GNU (`riscv64-unknown-elf`) mediante
    `$readmemh`.
 
 El programa declara `.globl INICIO`, la etiqueta de entrada que espera el enlazador.
+
+En una máquina sin binutils de GNU para RISC-V se puede usar `bash sw/ensamblar_llvm.sh
+sw/programa.s`, que hace lo mismo con LLVM (`llvm-mc`, `llvm-objdump`, `llvm-objcopy`; en Ubuntu
+vienen en el paquete `llvm`). No enlaza: el programa es un solo archivo con todo en `.text`, y sin
+relajación `llvm-mc` deja resueltos los saltos en el mismo objeto. Si queda alguna relocación,
+como pasa con una etiqueta mal escrita, el script lo rechaza. Con el programa de 725
+instrucciones se comprobó que los dos scripts dan el mismo `programa.hex` palabra por palabra.
 
 ---
 
@@ -122,6 +130,9 @@ Así una sola rutina atiende a los dos jugadores sin repetir código.
 |---|---|
 | Bits de `BOTONES` | `BTN_ARRIBA = 0x01`, `BTN_ABAJO = 0x02`, `BTN_IZQ = 0x04`, `BTN_DER = 0x08`, `BTN_SEL = 0x10`, `BTN_OK = 0x20`, `BTN_RST = 0x40`, y `BTN_FLECHAS = 0x0F` |
 | Colores del VGA | `C_AGUA = 0`, `C_BARCO = 1`, `C_IMPACTO = 2`, `C_FALLO = 3`, `C_CURSOR = 4`, `C_FONDO = 5`, `C_J1 = 6`, `C_J2 = 7` |
+| Palabra de video | `BORDE = 8` (bit 3, línea del grid), `CAR_DESPL = 4` (el carácter va en `[9:4]`) |
+| Caracteres, ASCII − 32 | `CH_0 = 16` a `CH_9 = 25`, `CH_A = 33` a `CH_Z = 58` |
+| Filas del HUD | `HUD_FILA_TITULOS = 0`, `HUD_FILA_ESTADO = 1`, `HUD_FILA_LETRAS = 2`, `HUD_FILA_MENSAJE = 12`, `HUD_FILA_GANADAS = 14`, `HUD_FILA_RES0 = 11` a `HUD_FILA_RES2 = 13` |
 | Estado de casilla en RAM | `E_AGUA = 0`, `E_BARCO = 1`, `E_IMPACTO = 2`, `E_FALLO = 3` |
 | Melodías del buzzer | `SND_SILENCIO = 0`, `SND_IMPACTO = 1`, `SND_FALLO = 2`, `SND_HUNDIDO = 3`, `SND_INVALIDA = 4`, `SND_VICTORIA = 5` |
 | LED de estado | `LED_COLOCACION = 0x1`, `LED_BATALLA = 0x2`, `LED_RESULTADO = 0x4` |
@@ -216,25 +227,28 @@ arrastre a la siguiente.
 
 ## 4. Pantalla
 
-El programa decide qué se ve en cada casilla de la pantalla. El periférico VGA solo pinta el
-color de la palabra (ver [`PERIFERICO_VGA.md`](PERIFERICO_VGA.md)). La cuadrícula es de 20 × 15
-casillas y los colores son los de la paleta de ese doc.
+El programa decide qué se ve en cada casilla de la pantalla. El periférico VGA pinta lo que dice
+la palabra de cada casilla: un color de fondo, el bit `BORDE` para la línea del grid y un carácter
+encima (ver [`PERIFERICO_VGA.md`](PERIFERICO_VGA.md)). La cuadrícula es de 20 × 15 casillas y los
+colores son los de la paleta de ese doc.
 
 ```
 col:     0   1 ........ 8   9  10  11 ....... 18  19
-fila 0   (libre)
-fila 1   HUD: colocación pendiente o turno activo
-fila 2
-fila 3   │   tablero J1 (propio)  │       │  tablero J2 (rival)   │
- ...     │   filas 3 a 10         │       │  filas 3 a 10         │
-fila 10  │   columnas 1 a 8       │       │  columnas 11 a 18     │
-fila 11
-fila 12  HUD: resultado (color del ganador)
-fila 13
-fila 14
+fila 0       JUGADOR1              JUGADOR2              títulos
+fila 1   HUD: estado de la colocación, turno activo o fin de la partida
+fila 2       A B C D E F G H       A B C D E F G H       letras de columna
+fila 3   1 │ tablero J1 (propio) │    1 │ tablero J2 (rival)  │
+ ...     . │ filas 3 a 10        │    . │ filas 3 a 10        │
+fila 10  8 │ columnas 1 a 8      │    8 │ columnas 11 a 18    │
+fila 11  HUD: resultado (color del ganador)
+fila 12  HUD: mensaje de traspaso, o resultado
+fila 13  HUD: resultado
+fila 14  GANADAS J1 00 J2 00
 ```
 
-Todo lo que no es tablero se pinta con `C_FONDO`.
+Los números de fila van en las columnas 0 y 10, a la izquierda de cada tablero. Las casillas de
+los tableros llevan `BORDE`, así se ven como un grid, y el resto de la pantalla no. Todo lo que no
+es tablero ni texto se pinta con `C_FONDO`.
 
 ### 4.1. Dirección de una casilla
 
@@ -247,15 +261,23 @@ Sin `mul`, `fp × 20 = (fp << 4) + (fp << 2)` y `10 × j = (j << 3) + (j << 1)`.
 
 ### 4.2. Qué muestra el HUD en cada fase
 
-| Fase | Fila 1 | Filas 12 a 14 |
+| Fase | Fila 1 | Filas 11 a 13 |
 |---|---|---|
-| Colocación | Columnas 1 a 8 en `C_J1` mientras el Jugador 1 no termina, y columnas 11 a 18 en `C_J2` mientras el Jugador 2 no termina. Cada barra pasa a `C_FONDO` cuando ese jugador completa su flota | `C_FONDO` |
-| Batalla | Columnas 0 a 19 en el color del jugador con el turno | `C_FONDO` |
-| Resultado | `C_FONDO` | Columnas 0 a 19 en el color del ganador |
+| Colocación | Columnas 1 a 8 en `C_J1` con `COLOCA` mientras el Jugador 1 no termina, y columnas 11 a 18 en `C_J2` con `COLOCA` mientras el Jugador 2 no termina. Cada barra pasa a `C_FONDO` con `LISTO` cuando ese jugador completa su flota | Fila 12: `COLOQUEN SUS BARCOS` |
+| Batalla, turno del Jugador 1 | Columnas 0 a 19 en `C_J1` con `TURNO JUGADOR 1` | Fila 12: `USE FLECHAS Y SW0` |
+| Batalla, turno del Jugador 2 | Columnas 0 a 19 en `C_J2` con `TURNO JUGADOR 2` | Fila 12: `ESPERANDO A LA PC` |
+| Resultado | `C_FONDO` con `FIN DE LA PARTIDA` | Columnas 0 a 19 en el color del ganador, con `GANA EL JUGADOR n` en la fila 12 y `SW15 NUEVA PARTIDA` en la 13 |
+
+Las filas 0, 2 y 14 y los números de fila no cambian en toda la partida, salvo los dígitos de
+`GANADAS`, que se actualizan al terminar cada partida.
 
 En la colocación las barras muestran por separado quién falta, que es el control independiente
 que pide el instructivo (4.3.1, punto 4). La barra del Jugador 2 solo dice si terminó, nunca
 dónde puso sus barcos.
+
+La fila 12 es el mensaje de traspaso que pide la sección 4.5.1 del enunciado: le dice al Jugador 1
+qué tiene que hacer o que le toca esperar a la PC. El texto sale en negro sobre las barras verdes
+y en blanco sobre las magenta y sobre el fondo; eso lo decide el periférico.
 
 ### 4.3. Cursor y vista previa
 
@@ -287,6 +309,38 @@ en un solo lugar.
 
 Del lado de la UART, ninguna trama lleva el contenido de `tablero_j1`. La PC solo recibe la
 casilla y el resultado de sus propios disparos.
+
+### 4.5. Texto
+
+Una letra en la pantalla es una palabra de video con el código del carácter en `[9:4]`:
+
+```
+palabra = (código << CAR_DESPL) | color de fondo,   código = ASCII − 32
+```
+
+La palabra completa es menor que 2048, así que entra en el inmediato de un `addi` y cada letra
+cuesta dos instrucciones: cargar la palabra y `sw` en `s1 + 4 × (fila × 20 + columna)`. Los textos
+son fijos, así que la macro `TEXTO` los arma en tiempo de ensamblado:
+
+```asm
+.macro TEXTO fila, col, color, palabra
+    .set texto_col, \col
+    .irpc c, \palabra                    # repite el cuerpo con cada letra de la palabra
+    li   t0, (CH_\c << CAR_DESPL) | \color
+    sw   t0, ((\fila * 20 + texto_col) * 4)(s1)
+    .set texto_col, texto_col + 1
+    .endr
+.endm
+```
+
+`TEXTO HUD_FILA_ESTADO, 2, C_J1, TURNO` escribe las cinco letras de `TURNO` desde la columna 2 de
+la fila 1 sobre verde. `CH_\c` arma el nombre de la constante con cada letra (`CH_T`, `CH_U`...),
+así la macro solo acepta letras y dígitos, y una frase son varias llamadas, una por palabra. El
+desplazamiento más grande es el de la última casilla, `4 × 299 = 1196`, y también entra en el
+inmediato del `sw`. Solo ensucia `t0`, así que se puede usar dentro de cualquier subrutina.
+
+La ROM no está en el bus de datos, así que los textos no se pueden guardar como cadenas y leerlos
+con `lw`: tienen que ir como instrucciones. Por eso ocupan unas 470 de las 1200 instrucciones.
 
 ---
 
@@ -344,6 +398,7 @@ PARTIDA:                                  (también destino de BTN_RST)
     jal NUEVA_PARTIDA
     FASE = F_COLOCACION, LED = LED_COLOCACION
     jal HUD_COLOCACION
+    TEXTO en la fila 12: COLOQUEN SUS BARCOS
     jal DIBUJAR_CURSOR(0, largo 4, horizontal)       vista previa del barco 0
     jal UART_ENVIAR_TRAMA(MSG_ESTADO, EST_COLOCACION, 0)
 ```
@@ -465,6 +520,7 @@ FIN_PARTIDA:                                 ganador = TURNO
     BUZZER = SND_VICTORIA
     jal HUD_RESULTADO(TURNO)
     jal SUMAR_GANADA(TURNO)
+    jal HUD_GANADAS
     jal UART_ENVIAR_TRAMA(MSG_ESTADO, EST_FIN, TURNO)
     jal UART_ENVIAR_TRAMA(MSG_RESUMEN_DISPAROS, DISPAROS_J1, DISPAROS_J2)
     jal UART_ENVIAR_TRAMA(MSG_RESUMEN_HUNDIDOS, HUNDIDOS_POR_J1, HUNDIDOS_POR_J2)
@@ -499,8 +555,11 @@ flowchart LR
     MAIN --> HT["HUD_TURNO"]
     MAIN --> HR["HUD_RESULTADO"]
     MAIN --> SG["SUMAR_GANADA"]
+    MAIN --> HG["HUD_GANADAS"]
     NP --> VL["VGA_LIMPIAR"]
     NP --> RT
+    NP --> HF["HUD_FIJO"]
+    NP --> HG
     UA --> VT["VALIDAR_TRAMA"]
     UT --> UB["UART_ENVIAR_BYTE"]
     RT --> PC
@@ -538,8 +597,10 @@ flowchart LR
 | `HUD_COLOCACION` | | | `VGA_RELLENAR_FILA` | 4 bytes |
 | `HUD_TURNO` | | | `VGA_RELLENAR_FILA` | 4 bytes |
 | `HUD_RESULTADO` | `a0` ganador | | `VGA_RELLENAR_FILA` | 8 bytes |
+| `HUD_FIJO` | | | | Hoja |
+| `HUD_GANADAS` | | | | Hoja |
 | `SUMAR_GANADA` | `a0` ganador | | | Hoja |
-| `NUEVA_PARTIDA` | | | `VGA_LIMPIAR`, `REPINTAR_TABLERO` | 4 bytes |
+| `NUEVA_PARTIDA` | | | `VGA_LIMPIAR`, `REPINTAR_TABLERO`, `HUD_FIJO`, `HUD_GANADAS` | 4 bytes |
 
 "Jugador" es siempre 0 para el Jugador 1 y 1 para el Jugador 2. "Orientación" es 0 horizontal y 1
 vertical. El marco es lo que cada subrutina guarda en la pila: `ra` más los `s*` que usa.
@@ -664,12 +725,12 @@ vuelve a 00, porque el instructivo pide un contador de 00 a 99.
    obligatorio: el VGA toma el color de los bits `[2:0]`, y el bit 2 de la casilla es parte del id
    del barco.
 2. Si `j = 1` y el estado es `E_BARCO`, lo cambia por `C_AGUA` (privacidad, sección 4.4).
-3. Escribe el resultado en `DIR_VGA_TABLERO(j, f, c)`. Los estados coinciden con los colores
-   `C_AGUA` a `C_FALLO`.
+3. Le suma `BORDE` (`ori`) y lo escribe en `DIR_VGA_TABLERO(j, f, c)`. Los estados coinciden con
+   los colores `C_AGUA` a `C_FALLO`, y el bit de borde es lo que dibuja la línea del grid.
 
 **`REPINTAR_TABLERO`.** Llama a `PINTAR_CASILLA` para las 64 casillas del tablero del jugador `j`.
 
-**`DIBUJAR_CURSOR`.** Pinta con `C_CURSOR` `largo` casillas del tablero del jugador `j`, desde
+**`DIBUJAR_CURSOR`.** Pinta con `C_CURSOR + BORDE` `largo` casillas del tablero del jugador `j`, desde
 `(CURSOR_FILA, CURSOR_COL)` hacia la derecha o hacia abajo según la orientación. Se detiene en la
 primera casilla que cae fuera del tablero. Con `largo = 1` es el cursor de la batalla.
 
@@ -679,8 +740,22 @@ primera casilla que cae fuera del tablero. Con `largo = 1` es el cursor de la ba
 **`VGA_RELLENAR_FILA`.** Escribe un color en las casillas de una fila de la pantalla, desde la
 columna inicial hasta la final, las dos incluidas.
 
-**`HUD_COLOCACION`**, **`HUD_TURNO`** y **`HUD_RESULTADO`** pintan la fila 1 y las filas 12 a 14 como
-dice la tabla de 4.2, a partir de `COLOCADOS_J1`, `COLOCADOS_J2`, `TURNO` o el ganador.
+**`HUD_COLOCACION`**, **`HUD_TURNO`** y **`HUD_RESULTADO`** pintan la fila 1 y las filas 11 a 13 como
+dice la tabla de 4.2, a partir de `COLOCADOS_J1`, `COLOCADOS_J2`, `TURNO` o el ganador. Primero
+rellenan la fila con su color usando `VGA_RELLENAR_FILA`, que borra el texto anterior porque
+escribe palabras sin carácter, y después escriben el texto con `TEXTO`. `HUD_TURNO` también borra
+y reescribe el mensaje de la fila 12. Como el color del texto va en el inmediato de cada letra, cada
+una tiene una rama por jugador.
+
+**`HUD_FIJO`.** Escribe lo que no cambia en toda la partida: `JUGADOR1` y `JUGADOR2` en la fila 0,
+`ABCDEFGH` encima de cada tablero en la fila 2, `GANADAS`, `J1` y `J2` en la fila 14, y los números
+1 a 8 en las columnas 0 y 10. Los números van en un lazo de 8 vueltas: la palabra del `1` se escribe
+en las dos columnas, y para la fila siguiente se le suma `1 << CAR_DESPL`, que es pasar al dígito
+siguiente.
+
+**`HUD_GANADAS`.** Escribe los cuatro dígitos de `GANADAS_BCD` en la fila 14, columnas 11-12
+(Jugador 1) y 17-18 (Jugador 2). Como el contador ya está en BCD, cada dígito es un nibble y su
+código es `CH_0 + nibble`, sin divisiones.
 
 ### 6.7. Partida nueva
 
@@ -695,7 +770,8 @@ dice la tabla de 4.2, a partir de `COLOCADOS_J1`, `COLOCADOS_J2`, `TURNO` o el g
    Estado colocación por vuelta.
 3. Escribe `SND_SILENCIO` en `BUZZER`, para cortar una melodía que venga sonando.
 4. Llama a `VGA_LIMPIAR` y a `REPINTAR_TABLERO` para los dos jugadores, que con la RAM en cero
-   pintan los dos tableros en agua.
+   pintan los dos tableros en agua con su borde.
+5. Llama a `HUD_FIJO` y a `HUD_GANADAS`.
 
 El LED, el HUD y la trama de Estado colocación los pone `PARTIDA` después de la llamada.
 
@@ -739,6 +815,14 @@ El programa se verifica en simulación antes de la placa, con pruebas de autoche
 3. **Post-implementación.** El instructivo pide una simulación temporizada que cubra un fragmento
    del programa y la validación de un disparo. El candidato es la prueba de `PROCESAR_DISPARO` del
    punto 1.
+
+**Estado actual.** `src/sim/tb_top.sv` hace el punto 2 con el sistema completo: el top con el
+modelo del PLL, el programa real de la ROM, los botones simulados y la UART del lado de la PC. Juega
+una partida entera, con la colocación de los dos jugadores (válidas, una repetida del Jugador 2 y
+una del Jugador 1 que se traslapa), 18 disparos hasta que el Jugador 2 hunde la flota del
+Jugador 1, el resultado, y un `BTN_RST` que conserva las ganadas. En cada paso compara las tramas
+que salen por `tx`, la RAM, el LED, los displays, el borde de las casillas y los textos del HUD.
+Son 82 pruebas y tarda cerca de un minuto.
 
 El programa no lee nunca la memoria de video. El estado del juego vive solo en la RAM, así que la
 latencia de lectura del puerto del CPU del VGA no afecta al programa.
