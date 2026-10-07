@@ -28,6 +28,9 @@ def tamano_casilla():
     # Un caracter de terminal es más o menos el doble de alto que de ancho
     ancho = min(ancho, 2 * alto + 1)
     alto = min(alto, ancho // 2 or 1)
+    # Con alto par no hay renglón del medio para el número de fila y el barco sobresale hacia arriba
+    alto -= 1 - alto % 2
+    ancho = min(ancho, 2 * alto + 1)
     return ancho, alto
 
 
