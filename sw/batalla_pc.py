@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import select
+import shutil
 import sys
 import time
 
@@ -36,6 +37,7 @@ def jugar(puerto):
     juego = partida.Partida()
     with terminal.modo_crudo():
         vista.dibujar(juego)
+        tamano = shutil.get_terminal_size()
         while True:
             listos, _, _ = select.select([sys.stdin, puerto], [], [], VUELTA)
             cambio = False
@@ -47,6 +49,10 @@ def jugar(puerto):
                 for evento in decodificador.alimentar(puerto.read(64)):
                     juego.aplicar(evento)
                     cambio = True
+            # Si se agranda la ventana el tablero se vuelve a escalar sin esperar a una tecla
+            if shutil.get_terminal_size() != tamano:
+                tamano = shutil.get_terminal_size()
+                cambio = True
             if juego.revisar_espera(time.monotonic()) or cambio:
                 vista.dibujar(juego)
 
