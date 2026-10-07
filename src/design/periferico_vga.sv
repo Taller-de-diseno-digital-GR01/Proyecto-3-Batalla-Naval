@@ -36,6 +36,11 @@ module periferico_vga #(parameter WIDTH = 32) (
   localparam int COLOR_WIDTH = 3;
   localparam int RGB_WIDTH = 12;
 
+  // Bit 3 de la palabra en 1: la casilla lleva una linea de 1 pixel en su contorno, en LINEA_RGB. Entre dos
+  // casillas con borde la linea queda de 2 pixeles. En cero la casilla es un bloque solido, como antes
+  localparam int BIT_BORDE = 3;
+  localparam logic [RGB_WIDTH-1:0] LINEA_RGB = 12'h000;
+
   // ---------------------------------------------------------------- memoria de video
 
   // RAM distribuida y no BRAM, el puerto A se lee combinacional igual que la RAM de datos del nucleo uniciclo,
@@ -116,26 +121,37 @@ module periferico_vga #(parameter WIDTH = 32) (
 
   // Puerto B, dominio clk_pix_i, solo lectura y registrada. El registro es lo que lo deja sincronizado al reloj de pixel
   logic [COLOR_WIDTH-1:0] color;
+  logic borde;
 
   always_ff @(posedge clk_pix_i) begin
     color <= memoria_video[indice_pix][COLOR_WIDTH-1:0];
+    borde <= memoria_video[indice_pix][BIT_BORDE];
   end
+
+  // Primer o ultimo pixel de la casilla en cualquiera de los dos ejes, son los 5 bits bajos de cada contador
+  logic en_contorno;
+
+  assign en_contorno = (h_count[4:0] == 5'd0) || (h_count[4:0] == 5'd31) ||
+                       (v_count[4:0] == 5'd0) || (v_count[4:0] == 5'd31);
 
   // El control se atrasa el mismo ciclo que la lectura, si no la imagen sale corrida un pixel contra los sincronismos
   logic video_on_d;
   logic hsync_d;
   logic vsync_d;
+  logic en_contorno_d;
 
   always_ff @(posedge clk_pix_i) begin
     if (rst_pix) begin
       video_on_d <= 1'b0;
       hsync_d <= 1'b1;
       vsync_d <= 1'b1;
+      en_contorno_d <= 1'b0;
     end
     else begin
       video_on_d <= video_on;
       hsync_d <= hsync_n;
       vsync_d <= vsync_n;
+      en_contorno_d <= en_contorno;
     end
   end
 
@@ -161,7 +177,11 @@ module periferico_vga #(parameter WIDTH = 32) (
   end
 
   // Fuera del area visible el monitor espera negro, lo usa para medir el nivel de referencia
-  assign rgb_pix = video_on_d ? rgb : '0;
+  always_comb begin
+    if (!video_on_d) rgb_pix = '0;
+    else if (borde && en_contorno_d) rgb_pix = LINEA_RGB;
+    else rgb_pix = rgb;
+  end
 
   // ---------------------------------------------------------------- registro de salida
 

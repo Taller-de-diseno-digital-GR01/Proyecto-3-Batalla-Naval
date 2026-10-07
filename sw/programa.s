@@ -65,6 +65,7 @@
 .equ C_FONDO,               5
 .equ C_J1,                  6
 .equ C_J2,                  7
+.equ BORDE,                 8       # bit 3 de la palabra de video: contorno negro (periferico_vga.sv)
 
 # --- Estado de una casilla en RAM, bits [1:0]. Los bits [3:2] son el id del barco ---
 .equ E_AGUA,                0
@@ -854,6 +855,7 @@ PC_ESCRIBIR:
     mv   a1, s4
     mv   a2, s5
     jal  ra, DIR_VGA_TABLERO
+    ori  s6, s6, BORDE                  # las casillas de tablero llevan la línea del grid
     sw   s6, 0(a0)                      # los estados coinciden con C_AGUA a C_FALLO
     lw   s6, 0(sp)
     lw   s5, 4(sp)
@@ -921,7 +923,7 @@ DC_CASILLA:
     mv   a1, s6
     mv   a2, s7
     jal  ra, DIR_VGA_TABLERO
-    li   t0, C_CURSOR
+    li   t0, C_CURSOR + BORDE
     sw   t0, 0(a0)
     beqz s5, DC_HORIZONTAL
     addi s6, s6, 1

@@ -30,7 +30,8 @@ module tb_periferico_vga;
   int errores = 0;
 
   // Lo que deberia haber en cada casilla, el testbench lo lleva aparte para no comparar el DUT contra si mismo
-  logic [2:0] modelo [0:CASILLAS-1];
+  // [2:0] color y [3] borde, el resto de la palabra el barrido no lo usa
+  logic [3:0] modelo [0:CASILLAS-1];
 
   // Lo que devuelve revisar_cuadro
   int malos_color;
@@ -100,7 +101,7 @@ module tb_periferico_vga;
     ciclo();
     we_tb = 1'b0;
     wdata_tb = 32'b0;
-    if (a < CASILLAS) modelo[a] = d[2:0];
+    if (a < CASILLAS) modelo[a] = d[3:0];
   endtask
 
   task automatic pintar(input int fila, input int col, input logic [2:0] c);
@@ -132,6 +133,8 @@ module tb_periferico_vga;
   task automatic revisar_cuadro(input logic [11:0] buscado);
     int h, v;
     bit visible;
+    bit contorno;
+    logic [3:0] casilla;
     logic [11:0] esperado;
     logic [11:0] visto;
     logic hs_esperado;
@@ -155,7 +158,12 @@ module tb_periferico_vga;
       h = p % H_TOTAL;
       v = p / H_TOTAL;
       visible = (h < H_VISIBLE) && (v < V_VISIBLE);
-      esperado = visible ? paleta(modelo[(v / 32) * COLUMNAS + h / 32]) : 12'h000;
+      casilla = modelo[(v / 32) * COLUMNAS + h / 32];
+      // Una casilla con borde lleva negro en su primer y ultimo pixel de cada eje
+      contorno = (h % 32 == 0) || (h % 32 == 31) || (v % 32 == 0) || (v % 32 == 31);
+      if (!visible) esperado = 12'h000;
+      else if (casilla[3] && contorno) esperado = 12'h000;
+      else esperado = paleta(casilla[2:0]);
       hs_esperado = !(h >= 656 && h <= 751);
       vs_esperado = !(v >= 490 && v <= 491);
       visto = {r_tb, g_tb, b_tb};
@@ -233,7 +241,7 @@ module tb_periferico_vga;
     we_tb = 1'b0;
     addr_tb = '0;
     wdata_tb = '0;
-    for (int i = 0; i < CASILLAS; i++) modelo[i] = 3'b000;
+    for (int i = 0; i < CASILLAS; i++) modelo[i] = 4'b0000;
 
     repeat (20) ciclo();
     anotar("con reset los contadores estan en 0", dut.h_count == 0 && dut.v_count == 0,
@@ -286,7 +294,8 @@ module tb_periferico_vga;
 
     // ------------------------------------------------ los 8 colores
 
-    // idx % 8 con 20 columnas reparte los 8 codigos por toda la pantalla, y la basura arriba prueba que el barrido ignora [31:3]
+    // idx % 8 con 20 columnas reparte los 8 codigos por toda la pantalla. La basura arriba prende el bit de
+    // borde en mas o menos la mitad de las casillas y prueba que el barrido ignora [31:4]
     for (int i = 0; i < CASILLAS; i++) begin
       palabra = $urandom;
       escribir(i, {palabra[31:3], 3'(i % 8)});

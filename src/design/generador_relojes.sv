@@ -41,8 +41,12 @@ module generador_relojes (
     .CLKOUT4  (),
     .CLKOUT5  (),
     .LOCKED   (locked_o),
-    .PWRDWN   (1'b0),
-    .RST      (1'b0)
+    // Sin conectar a proposito, no en 1'b0. Con una constante, nextpnr-xilinx rutea el pin y escribe
+    // mal su bit de inversion (ZINV_RST), y el PLL queda en reinicio para siempre: sin locked y sin
+    // ninguna salida, probado en la tarjeta. Sin conectar es como lo usa LiteX con este mismo flujo,
+    // y Vivado deja los pines sin conectar en cero
+    .PWRDWN   (),
+    .RST      ()
   );
 
   // Cada salida a la red global de reloj

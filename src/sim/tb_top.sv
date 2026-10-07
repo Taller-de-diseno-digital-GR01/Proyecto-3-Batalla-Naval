@@ -165,6 +165,10 @@ module tb_top;
     return dut.u_periferico_vga.memoria_video[casilla][2:0];
   endfunction
 
+  function automatic logic borde_vga(input int casilla);
+    return dut.u_periferico_vga.memoria_video[casilla][3];
+  endfunction
+
   function automatic logic [31:0] ram(input int palabra);
     return dut.u_ram.mem[palabra];
   endfunction
@@ -196,6 +200,29 @@ module tb_top;
            color_vga(VGA_J1_FILA0 + 4) === C_AGUA,
            $sformatf("casillas (0,0), (0,3) y (0,4) dieron %0d, %0d y %0d",
                      color_vga(VGA_J1_FILA0), color_vga(VGA_J1_FILA0 + 3), color_vga(VGA_J1_FILA0 + 4)));
+
+    // El bit 3 (BORDE) va en las 128 casillas de los tableros y en ninguna otra
+    begin
+      int con_borde_tablero;
+      int con_borde_fuera;
+      con_borde_tablero = 0;
+      con_borde_fuera = 0;
+      for (int i = 0; i < 300; i++) begin
+        int f, c;
+        bit tablero;
+        f = i / 20;
+        c = i % 20;
+        tablero = (f >= 3 && f <= 10) && ((c >= 1 && c <= 8) || (c >= 11 && c <= 18));
+        if (borde_vga(i) === 1'b1) begin
+          if (tablero) con_borde_tablero++;
+          else con_borde_fuera++;
+        end
+      end
+      anotar("las casillas de los tableros llevan el bit de borde y el resto no",
+             con_borde_tablero == 128 && con_borde_fuera == 0,
+             $sformatf("%0d de 128 casillas de tablero con borde y %0d fuera de los tableros",
+                       con_borde_tablero, con_borde_fuera));
+    end
 
     // 7 segmentos: un solo anodo activo y el digito en cero (abcdef encendidos, g apagado)
     anotar("el display muestra 00 00 de partidas ganadas",
