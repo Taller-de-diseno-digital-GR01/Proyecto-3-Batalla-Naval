@@ -23,12 +23,13 @@ impacto, fallo, hundido, colocación inválida y victoria.
 
 ## d) Entradas
 
-- `clk`, reloj del sistema de 100 MHz.
+- `clk`, reloj del sistema de 33,33 MHz.
 - `rst`, reset síncrono.
 - `i_iniciar`, pulso de un ciclo cuando el programa escribe el registro del buzzer, desde `DECOD_DIR`.
 - `i_sonido[2:0]`, código de la melodía que está sonando, desde `REG_SONIDO`.
 
-El módulo tiene los parámetros `CLK_FREQ_HZ = 100_000_000` y `UNIDAD_MS = 50`. En simulación se baja
+El módulo tiene los parámetros `CLK_FREQ_HZ = 100_000_000` y `UNIDAD_MS = 50`. En el top le llega
+`CLK_FREQ_HZ = 33_333_333`, la frecuencia de `clk_i`, desde `PERIFERICO_BUZZER`. En simulación se baja
 `CLK_FREQ_HZ` y todo, la unidad y los divisores de las notas, se reescala junto.
 
 ## e) Salidas
@@ -83,27 +84,28 @@ termina la partida, lo decide el programa escribiendo solo el que corresponde.
 
 Cada nota es un índice de 4 bits. El divisor sale de `N = CLK_FREQ_HZ / (2 f) - 1`, con división
 entera, igual que en el Proyecto 2. Los N se calculan como `localparam` a partir de las
-frecuencias, así que la tabla no guarda números mágicos.
+frecuencias, así que la tabla no guarda números mágicos. La columna de 33,33 MHz es la que corre en
+la tarjeta, y la de 100 MHz es la del valor por defecto del parámetro, que revisa el testbench.
 
-| Índice | Nota     | f (Hz) | N a 100 MHz |
-| ------ | -------- | ------ | ----------- |
-| `0`    | silencio | -      | `0`         |
-| `1`    | A3       | 220    | `227271`    |
-| `2`    | C4       | 262    | `190838`    |
-| `3`    | E4       | 330    | `151514`    |
-| `4`    | G4       | 392    | `127550`    |
-| `5`    | C5       | 523    | `95601`     |
-| `6`    | E5       | 659    | `75871`     |
-| `7`    | G5       | 784    | `63774`     |
-| `8`    | C6       | 1047   | `47754`     |
-| `9`    | E6       | 1319   | `37906`     |
-| `10`   | G6       | 1568   | `31886`     |
-| `11` a `15` | sin usar | - | `0`       |
+| Índice | Nota     | f (Hz) | N a 33,33 MHz (top) | N a 100 MHz |
+| ------ | -------- | ------ | ------------------- | ----------- |
+| `0`    | silencio | -      | `0`                 | `0`         |
+| `1`    | A3       | 220    | `75756`             | `227271`    |
+| `2`    | C4       | 262    | `63612`             | `190838`    |
+| `3`    | E4       | 330    | `50504`             | `151514`    |
+| `4`    | G4       | 392    | `42516`             | `127550`    |
+| `5`    | C5       | 523    | `31866`             | `95601`     |
+| `6`    | E5       | 659    | `25289`             | `75871`     |
+| `7`    | G5       | 784    | `21257`             | `63774`     |
+| `8`    | C6       | 1047   | `15917`             | `47754`     |
+| `9`    | E6       | 1319   | `12634`             | `37906`     |
+| `10`   | G6       | 1568   | `10628`             | `31886`     |
+| `11` a `15` | sin usar | - | `0`                | `0`         |
 
 Las frecuencias son las de la escala temperada redondeadas al entero. Con estos N la frecuencia real
-queda a menos de 0.01% de la nominal, que no se distingue de oído. Los índices sin usar dan `N = 0`,
-y si alguno se colara en la ROM el buzzer sonaría a 50 MHz, que el piezo no reproduce, en vez de
-quedarse pegado.
+queda a menos de 0.01% de la nominal en las dos columnas, que no se distingue de oído. Los índices sin
+usar dan `N = 0`, y si alguno se colara en la ROM el buzzer sonaría a la mitad de `clk_i` (16,7 MHz en
+el top), que el piezo no reproduce, en vez de quedarse pegado.
 
 ### ROM_MELODIAS
 
@@ -172,8 +174,8 @@ siete notas y el paso 7, si se llega, es siempre fin. Hundido y victoria ya la u
 
 ### Contadores
 
-`CICLOS_UNIDAD = CLK_FREQ_HZ / 1000 x UNIDAD_MS`, 5 000 000 ciclos a 100 MHz, así que `cont_ciclos`
-es de 23 bits. `tick_unidad` vale `cont_ciclos == CICLOS_UNIDAD - 1` y `fin_nota` vale
+`CICLOS_UNIDAD = CLK_FREQ_HZ / 1000 x UNIDAD_MS`, 1 666 650 ciclos a 33,33 MHz, y `cont_ciclos` tiene
+`$clog2(CICLOS_UNIDAD)` bits, 21 en el top (23 con el valor por defecto de 100 MHz). `tick_unidad` vale `cont_ciclos == CICLOS_UNIDAD - 1` y `fin_nota` vale
 `tick_unidad` en AND con `cont_unidades == dur - 1`.
 
 | Condición                  | `cont_ciclos'`    | `cont_unidades'`    | `paso'`     |

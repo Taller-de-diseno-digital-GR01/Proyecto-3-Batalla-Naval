@@ -65,6 +65,7 @@
 .equ C_FONDO,               5
 .equ C_J1,                  6
 .equ C_J2,                  7
+.equ BORDE,                 8       # bit 3 de la palabra de video: contorno negro (periferico_vga.sv)
 
 # --- Estado de una casilla en RAM, bits [1:0]. Los bits [3:2] son el id del barco ---
 .equ E_AGUA,                0
@@ -122,13 +123,61 @@
 
 # --- Pantalla: cuadrícula de 20 x 15 casillas, una palabra por casilla ---
 .equ VGA_BYTES,             1200    # 300 casillas * 4 bytes
-.equ TAB_FILA0,             3       # fila de pantalla de la fila 0 de los tableros
+.equ TAB_FILA0,             4       # fila de pantalla de la fila 0 de los tableros
 .equ TAB_COL0,              1       # columna de pantalla de la columna 0 del tablero J1
-.equ HUD_FILA_ESTADO,       1       # barras de colocación o de turno
-.equ HUD_FILA_RES0,         12      # resultado, filas 12 a 14
-.equ HUD_FILA_RES1,         13
-.equ HUD_FILA_RES2,         14
+# Las filas 0 y 14 quedan vacías: muchos monitores esconden unos píxeles del borde de la imagen
+.equ HUD_FILA_TITULOS,      1       # JUGADOR 1 y JUGADOR 2 encima de cada tablero
+.equ HUD_FILA_ESTADO,       2       # barras de colocación, turno, o el ganador al final
+.equ HUD_FILA_LETRAS,       3       # A a H encima de cada tablero
+.equ HUD_FILA_MENSAJE,      12      # mensaje de traspaso, o cómo empezar otra partida al final
+.equ HUD_FILA_GANADAS,      13      # PARTIDAS GANADAS J1 00 J2 00
+.equ HUD_COL_GANADAS_J1,    13      # casilla con los dos dígitos de las ganadas del Jugador 1
+.equ HUD_COL_GANADAS_J2,    17
 .equ ULTIMA_COL,            19
+
+# --- Texto en la palabra de video, en ASCII - 32 (periferico_vga.sv) ---
+# Dos caracteres por casilla: [9:4] la mitad izquierda y [15:10] la derecha. Con CENTRADO se
+# dibuja solo el de [9:4], en el centro de la casilla.
+.equ CAR_DESPL,             4
+.equ CAR2_DESPL,            10
+.equ CENTRADO,              0x10000 # bit 16
+.equ CH__,                  0       # espacio, en TEXTO se escribe _
+.equ CH_0,                  16
+.equ CH_1,                  17
+.equ CH_2,                  18
+.equ CH_3,                  19
+.equ CH_4,                  20
+.equ CH_5,                  21
+.equ CH_6,                  22
+.equ CH_7,                  23
+.equ CH_8,                  24
+.equ CH_9,                  25
+.equ CH_A,                  33
+.equ CH_B,                  34
+.equ CH_C,                  35
+.equ CH_D,                  36
+.equ CH_E,                  37
+.equ CH_F,                  38
+.equ CH_G,                  39
+.equ CH_H,                  40
+.equ CH_I,                  41
+.equ CH_J,                  42
+.equ CH_K,                  43
+.equ CH_L,                  44
+.equ CH_M,                  45
+.equ CH_N,                  46
+.equ CH_O,                  47
+.equ CH_P,                  48
+.equ CH_Q,                  49
+.equ CH_R,                  50
+.equ CH_S,                  51
+.equ CH_T,                  52
+.equ CH_U,                  53
+.equ CH_V,                  54
+.equ CH_W,                  55
+.equ CH_X,                  56
+.equ CH_Y,                  57
+.equ CH_Z,                  58
 
 # ==============================================================================
 # Inicio de cada vuelta de los tres lazos (PROGRAMA.md, sección 5)
@@ -146,6 +195,33 @@
     mv   s6, a2
     andi t0, s3, BTN_RST
     bnez t0, PARTIDA
+.endm
+
+# ==============================================================================
+# TEXTO fila, columna, color, FRASE: escribe FRASE en la pantalla desde la casilla (fila, columna)
+# sobre el color dado, dos letras por casilla. Solo letras, dígitos y _ para los espacios. Si la
+# frase tiene un número impar de letras, la última casilla lleva una sola. Para empezar en la mitad
+# derecha de una casilla, la frase arranca con _. Cada casilla cuesta 3 instrucciones (lui, addi y
+# sw), o 2 si la palabra cabe en el inmediato. Ensucia t0.
+# ==============================================================================
+.macro TEXTO fila, col, color, frase
+    .set texto_col, \col
+    .set texto_par, 0
+    .irpc c, \frase
+    .if texto_par == 0
+    .set texto_izq, CH_\c
+    .set texto_par, 1
+    .else
+    li   t0, (CH_\c << CAR2_DESPL) | (texto_izq << CAR_DESPL) | \color
+    sw   t0, ((\fila * 20 + texto_col) * 4)(s1)
+    .set texto_col, texto_col + 1
+    .set texto_par, 0
+    .endif
+    .endr
+    .if texto_par == 1
+    li   t0, (texto_izq << CAR_DESPL) | \color
+    sw   t0, ((\fila * 20 + texto_col) * 4)(s1)
+    .endif
 .endm
 
 .globl INICIO
@@ -170,6 +246,7 @@ PARTIDA:                                # también es el destino de BTN_RST
     li   t0, LED_COLOCACION
     sw   t0, LED(s0)
     jal  ra, HUD_COLOCACION
+    TEXTO HUD_FILA_MENSAJE, 0, C_FONDO, _J1_COLOCA_CON_BOTONES_Y_J2_DESDE_LA_PC
     li   a0, 0                          # vista previa del barco 0: largo 4, horizontal
     li   a1, 4
     li   a2, 0
@@ -440,6 +517,7 @@ FIN_PARTIDA:
     jal  ra, HUD_RESULTADO
     lw   a0, TURNO(s2)
     jal  ra, SUMAR_GANADA
+    jal  ra, HUD_GANADAS
     li   a0, MSG_ESTADO
     li   a1, EST_FIN
     lw   a2, TURNO(s2)
@@ -480,7 +558,7 @@ DIR_TABLERO:
 
 # ------------------------------------------------------------------------------
 # DIR_VGA_TABLERO: a0 jugador, a1 fila, a2 columna -> a0 dirección en video.
-# s1 + 4 * (fp * 20 + cp), con fp = 3 + fila y cp = 1 + 10 * jugador + columna. Hoja.
+# s1 + 4 * (fp * 20 + cp), con fp = TAB_FILA0 + fila y cp = 1 + 10 * jugador + columna. Hoja.
 # ------------------------------------------------------------------------------
 DIR_VGA_TABLERO:
     addi t0, a1, TAB_FILA0              # fp
@@ -854,6 +932,7 @@ PC_ESCRIBIR:
     mv   a1, s4
     mv   a2, s5
     jal  ra, DIR_VGA_TABLERO
+    ori  s6, s6, BORDE                  # las casillas de tablero llevan la línea del grid
     sw   s6, 0(a0)                      # los estados coinciden con C_AGUA a C_FALLO
     lw   s6, 0(sp)
     lw   s5, 4(sp)
@@ -921,7 +1000,7 @@ DC_CASILLA:
     mv   a1, s6
     mv   a2, s7
     jal  ra, DIR_VGA_TABLERO
-    li   t0, C_CURSOR
+    li   t0, C_CURSOR + BORDE
     sw   t0, 0(a0)
     beqz s5, DC_HORIZONTAL
     addi s6, s6, 1
@@ -984,29 +1063,40 @@ HUD_COLOCACION:
     li   a0, HUD_FILA_ESTADO
     li   a1, 1                          # columnas del tablero J1
     li   a2, 8
-    li   a3, C_J1
     lw   t0, COLOCADOS_J1(s2)
     li   t1, 3
-    bne  t0, t1, HC_J1
-    li   a3, C_FONDO                    # el Jugador 1 terminó
-HC_J1:
+    beq  t0, t1, HC_J1_LISTO
+    li   a3, C_J1
     jal  ra, VGA_RELLENAR_FILA
+    TEXTO HUD_FILA_ESTADO, 2, C_J1, _COLOCANDO
+    j    HC_J2
+HC_J1_LISTO:                            # el Jugador 1 terminó
+    li   a3, C_FONDO
+    jal  ra, VGA_RELLENAR_FILA
+    TEXTO HUD_FILA_ESTADO, 3, C_FONDO, _LISTO
+HC_J2:
     li   a0, HUD_FILA_ESTADO
     li   a1, 11                         # columnas del tablero J2
     li   a2, 18
-    li   a3, C_J2
     lw   t0, COLOCADOS_J2(s2)
     li   t1, 7
-    bne  t0, t1, HC_J2
-    li   a3, C_FONDO                    # el Jugador 2 terminó
-HC_J2:
+    beq  t0, t1, HC_J2_LISTO
+    li   a3, C_J2
     jal  ra, VGA_RELLENAR_FILA
+    TEXTO HUD_FILA_ESTADO, 12, C_J2, _COLOCANDO
+    j    HC_SALIR
+HC_J2_LISTO:                            # el Jugador 2 terminó
+    li   a3, C_FONDO
+    jal  ra, VGA_RELLENAR_FILA
+    TEXTO HUD_FILA_ESTADO, 13, C_FONDO, _LISTO
+HC_SALIR:
     lw   ra, 0(sp)
     addi sp, sp, 4
     ret
 
 # ------------------------------------------------------------------------------
-# HUD_TURNO: fila 1 completa en el color del jugador con el turno.
+# HUD_TURNO: fila 1 completa en el color del jugador con el turno, con TURNO JUGADOR n, y el
+# mensaje de traspaso: qué tiene que hacer el Jugador 1, o que se espera a la PC.
 # Marco de 4 bytes: ra.
 # ------------------------------------------------------------------------------
 HUD_TURNO:
@@ -1018,12 +1108,27 @@ HUD_TURNO:
     lw   t0, TURNO(s2)
     addi a3, t0, C_J1                   # C_J1 + jugador
     jal  ra, VGA_RELLENAR_FILA
+    li   a0, HUD_FILA_MENSAJE
+    li   a1, 0
+    li   a2, ULTIMA_COL
+    li   a3, C_FONDO
+    jal  ra, VGA_RELLENAR_FILA          # borra el mensaje anterior
+    lw   t0, TURNO(s2)
+    bnez t0, HT_J2
+    TEXTO HUD_FILA_ESTADO, 5, C_J1, _TURNO_DEL_JUGADOR_1
+    TEXTO HUD_FILA_MENSAJE, 1, C_FONDO, APUNTE_CON_FLECHAS_Y_DISPARE_CON_SW0
+    j    HT_SALIR
+HT_J2:
+    TEXTO HUD_FILA_ESTADO, 5, C_J2, _TURNO_DEL_JUGADOR_2
+    TEXTO HUD_FILA_MENSAJE, 1, C_FONDO, _ESPERANDO_EL_DISPARO_DEL_JUGADOR_2
+HT_SALIR:
     lw   ra, 0(sp)
     addi sp, sp, 4
     ret
 
 # ------------------------------------------------------------------------------
-# HUD_RESULTADO: a0 ganador. Borra la fila 1 y pinta las filas 12 a 14 en su color.
+# HUD_RESULTADO: a0 ganador. Pinta la fila de estado y la del mensaje en su color, con
+# GANA EL JUGADOR n y cómo empezar otra partida. Las ganadas siguen a la vista.
 # Marco de 8 bytes: ra, s3 (color del ganador).
 # ------------------------------------------------------------------------------
 HUD_RESULTADO:
@@ -1034,26 +1139,83 @@ HUD_RESULTADO:
     li   a0, HUD_FILA_ESTADO
     li   a1, 0
     li   a2, ULTIMA_COL
-    li   a3, C_FONDO
+    mv   a3, s3
     jal  ra, VGA_RELLENAR_FILA
-    li   a0, HUD_FILA_RES0
+    li   a0, HUD_FILA_MENSAJE
     li   a1, 0
     li   a2, ULTIMA_COL
     mv   a3, s3
     jal  ra, VGA_RELLENAR_FILA
-    li   a0, HUD_FILA_RES1
-    li   a1, 0
-    li   a2, ULTIMA_COL
-    mv   a3, s3
-    jal  ra, VGA_RELLENAR_FILA
-    li   a0, HUD_FILA_RES2
-    li   a1, 0
-    li   a2, ULTIMA_COL
-    mv   a3, s3
-    jal  ra, VGA_RELLENAR_FILA
+    li   t1, C_J1
+    bne  s3, t1, HR_J2
+    TEXTO HUD_FILA_ESTADO, 5, C_J1, _GANA_EL_JUGADOR_1
+    TEXTO HUD_FILA_MENSAJE, 1, C_J1, _SUBA_Y_BAJE_SW15_PARA_OTRA_PARTIDA
+    j    HR_SALIR
+HR_J2:
+    TEXTO HUD_FILA_ESTADO, 5, C_J2, _GANA_EL_JUGADOR_2
+    TEXTO HUD_FILA_MENSAJE, 1, C_J2, _SUBA_Y_BAJE_SW15_PARA_OTRA_PARTIDA
+HR_SALIR:
     lw   s3, 0(sp)
     lw   ra, 4(sp)
     addi sp, sp, 8
+    ret
+
+# ------------------------------------------------------------------------------
+# HUD_FIJO: lo que no cambia en toda la partida. Títulos, letras A a H y números 1 a 8 de los
+# tableros, y el texto de la fila de ganadas. Hoja.
+# ------------------------------------------------------------------------------
+HUD_FIJO:
+    TEXTO HUD_FILA_TITULOS, 2, C_FONDO, _JUGADOR_1
+    TEXTO HUD_FILA_TITULOS, 12, C_FONDO, _JUGADOR_2
+    TEXTO HUD_FILA_GANADAS, 2, C_FONDO, PARTIDAS_GANADAS___J1_
+    TEXTO HUD_FILA_GANADAS, 14, C_FONDO, ___J2_
+    # Letras de columna, una centrada por casilla encima de cada tablero. El código de una letra
+    # es el de la anterior más uno, que en la palabra es sumar 1 << CAR_DESPL
+    li   t0, CENTRADO | (CH_A << CAR_DESPL) | C_FONDO
+    addi t1, s1, (HUD_FILA_LETRAS * 20 + TAB_COL0) * 4
+    li   t2, 8
+HF_LETRAS:
+    sw   t0, 0(t1)                      # tablero J1
+    sw   t0, 40(t1)                     # tablero J2, 10 columnas a la derecha
+    addi t0, t0, 1 << CAR_DESPL
+    addi t1, t1, 4                      # columna siguiente
+    addi t2, t2, -1
+    bnez t2, HF_LETRAS
+    # Números de fila a la izquierda de cada tablero, columnas 0 y 10
+    li   t0, CENTRADO | (CH_1 << CAR_DESPL) | C_FONDO
+    addi t1, s1, TAB_FILA0 * 20 * 4
+    li   t2, 8
+HF_NUMEROS:
+    sw   t0, 0(t1)                      # columna 0, Jugador 1
+    sw   t0, 40(t1)                     # columna 10, Jugador 2
+    addi t0, t0, 1 << CAR_DESPL
+    addi t1, t1, 80                     # fila siguiente
+    addi t2, t2, -1
+    bnez t2, HF_NUMEROS
+    ret
+
+# ------------------------------------------------------------------------------
+# HUD_GANADAS: los dígitos de GANADAS_BCD en la fila de ganadas, los dos de cada jugador en
+# una casilla. Hoja.
+# ------------------------------------------------------------------------------
+.macro DIGITOS_GANADAS desplazamiento, col
+    srli t1, t0, \desplazamiento + 4     # decena, mitad izquierda
+    andi t1, t1, 0xF
+    addi t1, t1, CH_0
+    slli t1, t1, CAR_DESPL
+    srli t2, t0, \desplazamiento         # unidad, mitad derecha
+    andi t2, t2, 0xF
+    addi t2, t2, CH_0
+    slli t2, t2, CAR2_DESPL
+    or   t1, t1, t2
+    ori  t1, t1, C_FONDO
+    sw   t1, ((HUD_FILA_GANADAS * 20 + \col) * 4)(s1)
+.endm
+
+HUD_GANADAS:
+    lw   t0, GANADAS_BCD(s2)
+    DIGITOS_GANADAS 8, HUD_COL_GANADAS_J1
+    DIGITOS_GANADAS 0, HUD_COL_GANADAS_J2
     ret
 
 # ------------------------------------------------------------------------------
@@ -1080,6 +1242,8 @@ NP_LIMPIAR:                             # tableros y variables en cero
     jal  ra, REPINTAR_TABLERO
     li   a0, 1
     jal  ra, REPINTAR_TABLERO
+    jal  ra, HUD_FIJO
+    jal  ra, HUD_GANADAS
     lw   ra, 0(sp)
     addi sp, sp, 4
     ret

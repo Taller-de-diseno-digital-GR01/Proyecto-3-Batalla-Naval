@@ -30,7 +30,22 @@ module tb_periferico_vga;
   int errores = 0;
 
   // Lo que deberia haber en cada casilla, el testbench lo lleva aparte para no comparar el DUT contra si mismo
-  logic [2:0] modelo [0:CASILLAS-1];
+  // [2:0] color, [3] borde, [9:4] y [15:10] caracteres, [16] centrado. El resto el barrido no lo usa
+  logic [16:0] modelo [0:CASILLAS-1];
+
+  // La fuente se lee una vez al arrancar desde otra instancia de la ROM, para que el modelo no la copie a
+  // mano. Lo que se prueba con ella es donde y de que color sale cada glifo. El contenido de la fuente se
+  // revisa aparte con la A dibujada a mano
+  logic [5:0] fuente_codigo;
+  logic [2:0] fuente_fila;
+  logic [4:0] fuente_bits;
+  logic [4:0] fuente [0:63][0:7];
+
+  fuente_caracteres u_fuente_ref (
+    .codigo_i (fuente_codigo),
+    .fila_i   (fuente_fila),
+    .bits_o   (fuente_bits)
+  );
 
   // Lo que devuelve revisar_cuadro
   int malos_color;
@@ -100,7 +115,7 @@ module tb_periferico_vga;
     ciclo();
     we_tb = 1'b0;
     wdata_tb = 32'b0;
-    if (a < CASILLAS) modelo[a] = d[2:0];
+    if (a < CASILLAS) modelo[a] = d[16:0];
   endtask
 
   task automatic pintar(input int fila, input int col, input logic [2:0] c);
@@ -132,6 +147,11 @@ module tb_periferico_vga;
   task automatic revisar_cuadro(input logic [11:0] buscado);
     int h, v;
     bit visible;
+    bit contorno;
+    bit texto;
+    int cx, cy, gc, gf;
+    logic [5:0] codigo;
+    logic [16:0] casilla;
     logic [11:0] esperado;
     logic [11:0] visto;
     logic hs_esperado;
@@ -155,7 +175,28 @@ module tb_periferico_vga;
       h = p % H_TOTAL;
       v = p / H_TOTAL;
       visible = (h < H_VISIBLE) && (v < V_VISIBLE);
-      esperado = visible ? paleta(modelo[(v / 32) * COLUMNAS + h / 32]) : 12'h000;
+      casilla = modelo[(v / 32) * COLUMNAS + h / 32];
+      // Una casilla con borde lleva negro en su primer y ultimo pixel de cada eje
+      contorno = (h % 32 == 0) || (h % 32 == 31) || (v % 32 == 0) || (v % 32 == 31);
+      // La casilla es una cuadricula de 16 x 16 celdas de 2 pixeles. El glifo ocupa las filas 5 a 11, y
+      // las celdas 1 a 5 de cada mitad, o las 5 a 9 de la casilla si esta centrado
+      cx = (h % 32) / 2;
+      cy = (v % 32) / 2;
+      gf = cy - 5;
+      if (casilla[16]) begin
+        codigo = casilla[9:4];
+        gc = cx - 5;
+      end
+      else begin
+        codigo = (cx >= 8) ? casilla[15:10] : casilla[9:4];
+        gc = (cx % 8) - 1;
+      end
+      texto = (gc >= 0 && gc <= 4 && gf >= 0 && gf <= 6) && fuente[codigo][gf][4 - gc];
+      if (!visible) esperado = 12'h000;
+      else if (casilla[3] && contorno) esperado = 12'h000;
+      else if (texto) esperado = (casilla[2:0] == 3'b011 || casilla[2:0] == 3'b100 || casilla[2:0] == 3'b110) ?
+                                 12'h000 : 12'hFFF;
+      else esperado = paleta(casilla[2:0]);
       hs_esperado = !(h >= 656 && h <= 751);
       vs_esperado = !(v >= 490 && v <= 491);
       visto = {r_tb, g_tb, b_tb};
@@ -233,7 +274,22 @@ module tb_periferico_vga;
     we_tb = 1'b0;
     addr_tb = '0;
     wdata_tb = '0;
-    for (int i = 0; i < CASILLAS; i++) modelo[i] = 3'b000;
+    for (int i = 0; i < CASILLAS; i++) modelo[i] = '0;
+
+    for (int c = 0; c < 64; c++) begin
+      for (int f = 0; f < 8; f++) begin
+        fuente_codigo = 6'(c);
+        fuente_fila = 3'(f);
+        #1;
+        fuente[c][f] = fuente_bits;
+      end
+    end
+    anotar("la A de la fuente es la dibujada a mano",
+           fuente[33][0] == 5'b01110 && fuente[33][1] == 5'b10001 && fuente[33][3] == 5'b10001 &&
+           fuente[33][4] == 5'b11111 && fuente[33][6] == 5'b10001 && fuente[33][7] == 5'b00000,
+           $sformatf("filas %05b %05b %05b %05b %05b %05b %05b %05b", fuente[33][0], fuente[33][1], fuente[33][2],
+                     fuente[33][3], fuente[33][4], fuente[33][5], fuente[33][6], fuente[33][7]));
+    anotar("y el espacio no dibuja nada", fuente[0][3] == 5'b00000, $sformatf("fila 3 dio %05b", fuente[0][3]));
 
     repeat (20) ciclo();
     anotar("con reset los contadores estan en 0", dut.h_count == 0 && dut.v_count == 0,
@@ -286,7 +342,9 @@ module tb_periferico_vga;
 
     // ------------------------------------------------ los 8 colores
 
-    // idx % 8 con 20 columnas reparte los 8 codigos por toda la pantalla, y la basura arriba prueba que el barrido ignora [31:3]
+    // idx % 8 con 20 columnas reparte los 8 codigos por toda la pantalla. La basura arriba prende el bit de
+    // borde y el centrado en mas o menos la mitad de las casillas, pone caracteres al azar y prueba que el
+    // barrido ignora [31:17]
     for (int i = 0; i < CASILLAS; i++) begin
       palabra = $urandom;
       escribir(i, {palabra[31:3], 3'(i % 8)});

@@ -22,11 +22,14 @@ calculado para un reloj de 16 MHz.
 
 ## d) Entradas
 
-- `clk`, reloj del sistema de 100 MHz.
+- `clk`, reloj del sistema de 33,33 MHz.
 - `rst`, reset síncrono.
 - `i_rx`, línea serial cruda desde el pin B18. Reposa en uno.
 
-El módulo tiene el parámetro `TICKS_X16 = 54`, ciclos de reloj por tick de sobremuestreo.
+El módulo tiene el parámetro `TICKS_X16 = 54`, ciclos de reloj por tick de sobremuestreo, calculado
+para 100 MHz. En el top `PERIFERICO_UART` le pasa `TICKS_X16 = 18`, que sale de `clk_i` de 33,33 MHz.
+Los números de los incisos g) y h) son los del valor por defecto, y el cálculo a 33,33 MHz está en
+`PERIFERICO_UART.md`.
 
 ## e) Salidas
 

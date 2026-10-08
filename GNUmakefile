@@ -40,6 +40,7 @@ PART            := xc7a35tcpg236-1
 PRJXRAY_DB_ROOT := $(PRJXRAY_DB_DIR)/artix7
 CHIPDB          := $(OPENXC7)/share/nextpnr-xilinx/chipdb/xc7a35tcpg236.bin
 XDC             := src/fpga/basys3.xdc
+VELOCIDAD_CONFIG := src/fpga/velocidad_config.py
 
 APP_DIR    := sw
 PYTHON     := python3
@@ -235,9 +236,12 @@ $(FRAMES_OUT): $(FASM_OUT)
 		{ echo "ERROR: $(FRAMES_OUT) salió vacío, el .bit que saldría de ahí no configura nada."; \
 		  rm -f $(FRAMES_OUT); exit 1; }
 
-$(BIT_OUT): $(FRAMES_OUT)
+# velocidad_config.py sube CCLK de ~3 a 33 MHz: sin eso la tarjeta tarda ~6 s en cargar el
+# diseño desde la flash después de PROG, y con eso ~0,5 s
+$(BIT_OUT): $(FRAMES_OUT) $(VELOCIDAD_CONFIG)
 	$(XC7FRAMES2BIT) --part_file $(PRJXRAY_DB_ROOT)/$(PART)/part.yaml --part_name $(PART) \
 		--frm_file $(FRAMES_OUT) --output_file $(BIT_OUT)
+	$(PYTHON) $(VELOCIDAD_CONFIG) $(BIT_OUT)
 
 bitstream: check-fpga-toolchain $(BIT_OUT)
 	@echo "Bitstream generado en $(BIT_OUT)"

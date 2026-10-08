@@ -6,7 +6,7 @@ module periferico_buzzer #(parameter WIDTH = 32, parameter CLK_FREQ_HZ = 100_000
   input logic [WIDTH-1:0] wdata_i,
   output logic [WIDTH-1:0] rdata_o,
 
-  output logic buzzer_o // pin M18, JC2
+  output logic buzzer_o // pin P18, JC4
   );
 
   localparam logic [1:0] ADDR_SONIDO = 2'b00;

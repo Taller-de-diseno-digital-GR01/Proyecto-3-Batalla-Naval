@@ -7,7 +7,7 @@ flowchart TD
     CLK(["clk 100 MHz"])
 
     subgraph FPGA
-        MMCM["MMCM<br/>relojes del sistema y de pixel"]
+        PLL["PLL<br/>relojes del sistema y de pixel"]
         ROM["Memoria de programa<br/>ROM"]
         CPU["Procesador uniciclo<br/>RISC-V"]
         MAP["Controlador de mapeo"]
@@ -27,8 +27,8 @@ flowchart TD
     LED(["LED de estado"])
     ALTAVOZ(["Buzzer"])
 
-    CLK --> MMCM
-    MMCM -->|"clk_pix 25 MHz"| VGA
+    CLK --> PLL
+    PLL -->|"clk_pix 25 MHz"| VGA
     CPU -->|"ProgAddress_o"| ROM
     ROM -->|"ProgIn_i"| CPU
     CPU -->|"DataAddress_o, DataOut_o, we_o"| MAP
@@ -56,16 +56,22 @@ flowchart TD
 
 ## Descripciones
 
-`clk_i` de 100 MHz y `rst_i`, que salen los dos del MMCM, llegan a todos los bloques, pero se omiten sus líneas repetidas para mantener legible el diagrama.
+`clk_i` de 33,33 MHz y `rst_i`, que salen los dos del PLL, llegan a todos los bloques, pero se omiten sus líneas repetidas para mantener legible el diagrama.
 
-### Bloque 1: MMCM
+### Bloque 1: PLL
 
-Saca del único reloj de 100 MHz los dos relojes del sistema, `clk_i` de 100 MHz para el procesador, las memorias y los periféricos, y `clk_pix` de 25 MHz para el VGA. Como los dos salen del mismo MMCM quedan relacionados en fase, que es lo que usa `PERIFERICO_VGA.md` para justificar el cruce de dominios. Con openXC7 no hay Clocking Wizard, así que la primitiva `MMCME2_BASE` se instancia a mano. El enunciado también deja abierta la opción de sacar un reloj aparte para la UART, pero no hace falta, `PERIFERICO_UART` usa los mismos 100 MHz de `clk_i` y saca los 115200 baudios con contadores internos. Si `clk_i` dejara de ser de 100 MHz se le pasa la frecuencia nueva en el parámetro `CLK_FREQ_HZ` y el periférico recalcula sus divisores.
+Saca del único reloj de 100 MHz los dos relojes del sistema, `clk_i` de 33,33 MHz para el procesador, las memorias y los periféricos, y `clk_pix` de 25 MHz para el VGA. Es el módulo `generador_relojes.sv`, y en `top.sv` la red de `clk_i` se llama `clk_sys`. Con openXC7 no hay Clocking Wizard, así que la primitiva `PLLE2_BASE` se instancia a mano. El VCO corre a 1000 MHz (100 MHz × 10), y las dos salidas son divisiones enteras de él, 1000 / 30 = 33,33 MHz y 1000 / 40 = 25 MHz. Como salen del mismo VCO quedan relacionados en fase, que es lo que usa `PERIFERICO_VGA.md` para justificar el cruce de dominios. No hace falta un MMCM, porque no se usa desplazamiento fino de fase ni divisores fraccionarios.
+
+**Por qué 33,33 MHz.** El enunciado exige una sola entrada de 100 MHz y que todo reloj derivado salga de un PLL, pero no fija la frecuencia de `clk_i`. En un uniciclo cada instrucción se completa en un solo ciclo, así que el periodo lo pone el camino de un `lw`: `PC`, ROM, banco de registros, ALU, controlador de mapeo, RAM o periférico, multiplexor de lectura y escritura en el banco. Con el sistema integrado, nextpnr-xilinx da entre 39 y 50 MHz de máximo para `clk_i`, según cómo quede la colocación. 100 MHz es imposible y 40 MHz queda sin margen en las peores colocaciones. Con 1000 / 30 = 33,33 MHz el periodo es de 30 ns, unos 4 ns más que el camino crítico de la peor colocación medida (39 MHz, 25,6 ns), así que cierra timing en todas. También le sirve a la UART: el receptor sobremuestrea con `TICKS_X16 = 18` y queda con 0,47 % de error, el mismo que a 100 MHz (a 40 MHz serían 22 y 1,4 %).
+
+El costo es que la vuelta más larga del programa sin leer la UART tarda 111 µs, más que los 87 µs que tarda en llegar un byte. Por eso la aplicación de PC deja 1 ms entre los bytes de una trama. El detalle está en [`PROGRAMA.md`](../modulos/PROGRAMA.md), sección 4.3.
+
+El enunciado también deja abierta la opción de sacar un reloj aparte para la UART, pero no hace falta. `PERIFERICO_UART` y `PERIFERICO_BUZZER` usan `clk_i` y reciben su frecuencia en el parámetro `CLK_FREQ_HZ = 33_333_333`, del que calculan sus divisores.
 
 - Entradas, `clk` de 100 MHz del pin W5.
-- Salidas, `clk_i` de 100 MHz hacia todos los bloques, `clk_pix` de 25 MHz hacia `PERIFERICO_VGA` y `locked`, que negado es el `rst_i` de todos los bloques.
+- Salidas, `clk_i` de 33,33 MHz hacia todos los bloques, `clk_pix` de 25 MHz hacia `PERIFERICO_VGA` y `locked`, que negado es el `rst_i` de todos los bloques.
 
-No hay pin de reset. El reinicio general es el botón PROG de la Basys 3, que vuelve a configurar la FPGA desde la flash, y `rst_i` queda en alto hasta que el MMCM engancha.
+No hay pin de reset. El reinicio general es el botón PROG de la Basys 3, que vuelve a configurar la FPGA desde la flash, y `rst_i` queda en alto hasta que el PLL engancha. `~locked` pasa por dos flip-flops en `clk_i` antes de llegar a los bloques.
 
 ### Bloque 2: Procesador uniciclo
 
@@ -113,7 +119,7 @@ Mueve bytes entre el programa y la aplicación de PC, y es el único canal que t
 
 Lee su mapa de casillas para generar la imagen del Jugador 1 a 640 × 480 a 60 Hz. Se expone como una memoria de video en `0x0001_1000` a `0x0001_17FF`, una palabra por casilla de la cuadrícula. El procesador escribe por el reloj del sistema y la lógica de video lee por el reloj de pixel. El periférico genera los sincronismos y la imagen, sin aplicar reglas del juego. El detalle está en [`PERIFERICO_VGA.md`](../modulos/PERIFERICO_VGA.md).
 
-- Entradas, bus de memoria con `addr_i[8:0]`, y `clk_pix` del MMCM.
+- Entradas, bus de memoria con `addr_i[8:0]`, y `clk_pix` del PLL.
 - Salidas, `rdata_o[31:0]` hacia el multiplexor de lectura, y `vgaRed[3:0]`, `vgaGreen[3:0]`, `vgaBlue[3:0]`, `Hsync` y `Vsync`.
 
 ### Bloque 9: PERIFERICO_7SEG

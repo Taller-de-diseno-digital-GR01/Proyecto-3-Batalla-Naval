@@ -362,7 +362,7 @@ Con 8 + 1 + 8 = 17 columnas de las 20 disponibles y 8 filas de las 15, queda esp
 
 El enunciado especifica que el periférico VGA se implemente como **memoria de doble puerto**:
 
-- **Puerto A (escritura):** síncrono al reloj del sistema (100 MHz), accedido por el CPU con `write_enable_i`/`addr_i`/`wdata_i`.
+- **Puerto A (escritura):** síncrono al reloj del sistema (33,33 MHz), accedido por el CPU con `write_enable_i`/`addr_i`/`wdata_i`.
 - **Puerto B (lectura):** solo lectura, síncrono al reloj de píxel (25 MHz), leído continuamente por la lógica de barrido.
 
 Esto es una **BRAM de doble puerto verdadero (*true dual-port*) con relojes independientes**, una primitiva nativa del Artix-7 que Vivado infiere a partir de un patrón de codificación estándar: un arreglo `logic [31:0] mem [0:511]` accedido desde dos bloques `always_ff` con relojes distintos [8][15].
@@ -373,7 +373,7 @@ Esto es una **BRAM de doble puerto verdadero (*true dual-port*) con relojes inde
 - El único escenario problemático es una **colisión**: que el CPU escriba en la misma dirección que el puerto de video está leyendo en ese instante. El resultado de la lectura en ese caso es indeterminado (podría devolver el valor viejo, el nuevo, o un valor corrupto en ese ciclo) [15].
 - **Impacto real: nulo en la práctica.** Una lectura corrupta afecta un único bloque durante un único cuadro de 16,7 ms, produciendo a lo sumo un parpadeo imperceptible. No hay corrupción del estado del juego, porque **el estado de verdad del juego vive en la RAM de datos, no en la memoria de video**. La memoria de video es únicamente una proyección de ese estado.
 - **No se requiere sincronizador ni FIFO** para los datos, porque no se transfieren señales de control de un dominio a otro: cada dominio tiene su propio puerto independiente.
-- Los relojes de 100 MHz y 25 MHz provienen del **mismo MMCM**, por lo que están relacionados en fase. Se declararán las restricciones de *timing* correspondientes y, si la herramienta reporta rutas cruzadas espurias, se aplicará `set_false_path` únicamente sobre rutas verificadas como seguras.
+- Los relojes de 33,33 MHz y 25 MHz provienen del **mismo PLL**, por lo que están relacionados en fase. Se declararán las restricciones de *timing* correspondientes y, si la herramienta reporta rutas cruzadas espurias, se aplicará `set_false_path` únicamente sobre rutas verificadas como seguras.
 - Se aplica además la práctica de **no cruzar señales de control de múltiples bits** sin un protocolo adecuado; para señales de un solo bit que deban cruzar (si las hubiera, por ejemplo un indicador de fin de cuadro hacia el CPU) se usará un sincronizador de dos *flip-flops* [17].
 
 > **Sobre el borrado de pantalla.** El enunciado indica que no se requiere un bit de `clear` en hardware: limpiar la pantalla es un lazo de software que escribe el color de fondo en las 300 posiciones. A 1 instrucción `sw` por bloque más el control del lazo (≈ 4 instrucciones por iteración), son unas 1200 instrucciones, es decir **12 µs a 100 MHz** — completamente imperceptible. Este es un ejemplo directo del principio de "hardware mínimo, control en software" que estructura todo el proyecto.

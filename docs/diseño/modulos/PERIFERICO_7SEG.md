@@ -158,7 +158,7 @@ quedar en `src/fpga/basys3.xdc`, las mismas del Proyecto 2.
 
 Conexiones en el top.
 
-- `clk_i`, al reloj global de 100 MHz, pin W5.
+- `clk_i`, a `clk_sys`, el reloj del sistema de 33,33 MHz que sale del PLL.
 - `rst_i`, al reinicio general del sistema.
 - `write_enable_i`, a `display_we` del controlador de mapeo, en alto solo cuando `we_o` está en alto y
   `DataAddress_o` es `0x0001_0130`.

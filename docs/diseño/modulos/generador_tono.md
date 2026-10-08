@@ -22,7 +22,7 @@ miraba el estado de la FSM y el resultado de la letra, elegía uno de tres tonos
 
 ## d) Entradas
 
-- `clk`, reloj del sistema de 100 MHz.
+- `clk`, reloj del sistema de 33,33 MHz.
 - `rst`, reset síncrono.
 - `i_n[ANCHO_N-1:0]`, medio periodo de la nota menos uno, en ciclos de reloj, desde `ROM_NOTAS` dentro de `SECUENCIADOR_MELODIA`.
 - `i_sonar`, en alto mientras haya que sonar, desde `SECUENCIADOR_MELODIA`.
@@ -71,7 +71,7 @@ En el Proyecto 2 el contador volvía a cero con `cont_divisor == reg_n`. Eso fun
 
 En una melodía la nota cambia sin pasar por silencio. Si se pasa de una nota grave a una aguda, el
 contador puede ir por encima del N nuevo en el momento del cambio, y con `==` seguiría subiendo
-hasta dar la vuelta en `2^18`. Eso son 2.6 ms de onda congelada en medio de la melodía. Con
+hasta dar la vuelta en `2^18`. Eso son 7.9 ms de onda congelada en medio de la melodía. Con
 `cont_divisor >= i_n` el contador vuelve a cero en el ciclo siguiente y lo peor que pasa es un medio
 periodo corto, que no se oye. Así tampoco hace falta un pulso de reinicio entre notas.
 
@@ -84,9 +84,11 @@ periodo corto, que no se oye. Así tampoco hace falta un pulso de reinicio entre
 
 ### Ancho del divisor
 
-La nota más grave de `ROM_NOTAS` es A3 a 220 Hz, con `N = 100e6 / (2 x 220) - 1 = 227271`. Eso
-pide 18 bits, y `2^18 = 262144` deja espacio para bajar hasta unos 191 Hz sin cambiar el ancho. Si
-se agrega una nota más grave, `ANCHO_N` sube junto con `ROM_NOTAS`.
+La nota más grave de `ROM_NOTAS` es A3 a 220 Hz. Con `clk_i` de 33,33 MHz,
+`N = 33333333 / (2 x 220) - 1 = 75756`, que entra en 17 bits. `ANCHO_N = 18` deja espacio para bajar
+hasta unos 64 Hz sin cambiar el ancho, y alcanza también si el reloj sube hasta 100 MHz
+(`N = 227271`, el caso más exigente). Si se agrega una nota más grave, `ANCHO_N` sube junto con
+`ROM_NOTAS`.
 
 ### Estructura del RTL
 
@@ -129,8 +131,7 @@ Conexiones dentro de `PERIFERICO_BUZZER`.
 - `rst`, a `rst_i`.
 - `i_n`, a `o_n` de `SECUENCIADOR_MELODIA`.
 - `i_sonar`, a `o_sonar` de `SECUENCIADOR_MELODIA`.
-- `o_sound`, a `buzzer_o`, que en el top va al pin M18 (JC2) con `IOSTANDARD LVCMOS33`, el mismo del
-  Proyecto 2.
+- `o_sound`, a `buzzer_o`, que en el top va al pin P18 (JC4) con `IOSTANDARD LVCMOS33`.
 
 Igual que en los demás módulos, el diagrama por chips que pide el método no aplica a un diseño que se
 sintetiza dentro de una sola FPGA, y esta lista de puertos es el reemplazo propuesto.
