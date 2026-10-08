@@ -76,7 +76,16 @@ BIT        ?= $(BIT_OUT)
 # el build si src/build/ quedó con binarios de otra máquina
 TOOLCHAIN_STAMP := $(BUILD_DIR)/.toolchain
 
-.PHONY: all help list sim wave dump test test-app synth bitstream program flash connect app clean check-tb check-fpga-toolchain programa FORCE
+# Linter y simulación del netlist de síntesis del sistema completo (siempre el top)
+VERILATOR     := verilator
+LINT_LOG      := $(BUILD_DIR)/lint.log
+PS_DIR        := $(SIM_DIR)/post_sintesis
+PS_NETLIST    := $(BUILD_DIR)/top_netlist.v
+PS_VVP        := $(BUILD_DIR)/tb_post_sintesis.vvp
+# Modelos de simulación de las primitivas de Xilinx que trae yosys (LUT, FDRE, CARRY4, RAM64M...)
+CELLS_SIM     := $(OPENXC7)/share/yosys/xilinx/cells_sim.v
+
+.PHONY: all help list sim wave dump test test-app synth lint post-sintesis bitstream program flash connect app clean check-tb check-fpga-toolchain programa FORCE
 
 # Si una receta falla, borra el archivo que estaba generando. Sin esto un paso que
 # escribe con redirección (ej. fasm2frames > top.frames) deja un archivo vacío que
@@ -95,6 +104,8 @@ help:
 	@echo "make test-app           corre las pruebas de la app de PC con unittest, no necesita la tarjeta"
 	@echo "make programa           ensambla $(PROG_SRC) con $(ENSAMBLAR) y regenera $(PROG_HEX)"
 	@echo "make synth SYNTH_TOP=<modulo>  sintetiza con yosys (genérico) y revisa que no haya latches inferidos"
+	@echo "make lint               pasa verilator --lint-only -Wall por el top y falla si encuentra latches o drivers múltiples"
+	@echo "make post-sintesis      simula el netlist de synth_xilinx del top con el programa real (src/sim/post_sintesis)"
 	@echo "make bitstream          genera $(BIT_OUT) con yosys + nextpnr-xilinx + prjxray (openXC7, sin Vivado)"
 	@echo "                        toma el toolchain de OPENXC7=$(OPENXC7) y PRJXRAY_PY=$(PRJXRAY_PY), no hace falta"
 	@echo "                        correr 'source .../export.sh' antes"
@@ -200,6 +211,31 @@ $(NETLIST_OUT): $(DESIGN_SRCS) $(PROG_HEX) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
 # módulo hoja como marcador). No sirve para testbenches (tb_*.sv no está en DESIGN_SRCS).
 synth: $(NETLIST_OUT)
 	@echo "Netlist generado en $(NETLIST_OUT)"
+
+# Linter del sistema completo. Sin SYNTHESIS definido, generador_relojes entra con su modelo de
+# simulación, porque verilator no conoce PLLE2_BASE ni BUFG. -Wall muestra también los avisos de
+# estilo (anchos, señales sin usar), que no detienen el make. Lo que sí lo detiene es un latch, una
+# asignación con retardo en lógica combinacional o una señal con más de un driver.
+lint: | $(BUILD_DIR)
+	@$(VERILATOR) --lint-only -Wall -Wno-fatal -I$(DESIGN_DIR) --top-module top $(DESIGN_SRCS) > $(LINT_LOG) 2>&1; \
+	grep -o "%Warning-[A-Z]*" $(LINT_LOG) | sort | uniq -c; \
+	if grep -q "%Error\|%Warning-LATCH\|%Warning-COMBDLY\|%Warning-MULTIDRIVEN\|%Warning-BLKANDNBLK" $(LINT_LOG); then \
+		cat $(LINT_LOG); \
+		echo "ERROR: verilator encontró latches, drivers múltiples o errores (ver $(LINT_LOG))"; \
+		exit 1; \
+	fi; \
+	echo "Lint sin latches ni drivers múltiples. Detalle en $(LINT_LOG)"
+
+# Simulación del netlist de síntesis: el mismo top.json que va a nextpnr, escrito como Verilog de
+# primitivas y simulado con sus modelos y con el de PLLE2_BASE de $(PS_DIR). El testbench solo mira
+# pines, porque el netlist ya no tiene jerarquía. Tarda bastante más que la simulación RTL.
+$(PS_NETLIST): $(JSON_OUT)
+	$(YOSYS) -q -p "read_json $(JSON_OUT); write_verilog -noattr $(PS_NETLIST)"
+
+post-sintesis: $(PS_NETLIST)
+	$(IVERILOG) -g2012 -DPOST_SINTESIS -o $(PS_VVP) $(PS_NETLIST) $(CELLS_SIM) $(PS_DIR)/PLLE2_BASE.v \
+		$(PS_DIR)/tb_post_sintesis.sv -s tb_post_sintesis
+	cd $(BUILD_DIR) && $(VVP) $(notdir $(PS_VVP))
 
 # Falla temprano y con un mensaje claro si falta algo del toolchain openXC7. Se revisa
 # todo acá y no a medio camino, porque un paso que falla tarde (típicamente fasm2frames

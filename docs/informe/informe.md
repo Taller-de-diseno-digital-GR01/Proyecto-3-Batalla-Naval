@@ -63,7 +63,8 @@ con el programa real. También pasan las 18 pruebas unitarias de la aplicación 
 no infiere latches. Después de colocar y rutear, el diseño ocupa 4701 LUT (22,6 % del XC7A35T) y
 `clk_sys` alcanza 44,39 MHz frente a los 33,33 MHz de operación. El sistema completo se probó en la
 Basys 3, cargado desde la flash, con partidas completas entre los dos jugadores. La simulación
-post-implementación temporizada queda pendiente (sección 10.7).
+post-implementación con SDF no es posible con este flujo, y se reemplaza por el timing estático
+después del ruteo y una simulación del netlist de síntesis (sección 10.7).
 
 ---
 
@@ -319,8 +320,10 @@ reproduce el código de sonido escrito por el programa.
 Los multiplexores y decodificadores deben definir una salida en todos los caminos de ejecución.
 Los valores por defecto y las ramas `default` evitan retener accidentalmente el resultado
 anterior. La revisión del RTL se complementa con el resultado de `proc` de yosys, que informa cada
-señal combinacional en la que no infiere un latch, y con la estadística de celdas del netlist. Una
-RAM o un registro explícito es almacenamiento intencional, no un latch accidental.
+señal combinacional en la que no infiere un latch, con la estadística de celdas del netlist y con
+un linter (Verilator), que avisa de latches, de asignaciones con retardo dentro de lógica
+combinacional y de señales con más de un driver. Una RAM o un registro explícito es almacenamiento
+intencional, no un latch accidental.
 
 ---
 
@@ -921,6 +924,7 @@ criterio automático de pase.
 | PC | `unittest` de codificación y estado | 18 pruebas sin fallos |
 | Integración | `tb_top` con ROM real | Tramas, tableros, HUD, LED, display y resultado coherentes durante la partida |
 | Síntesis | `make synth` con yosys | Ningún `Latch inferred` en el log ni latch en el netlist |
+| Linter | `make lint`, `verilator --lint-only -Wall` sobre el top | Ningún aviso de latch, de asignación con retardo en lógica combinacional ni de driver múltiple |
 | Implementación | nextpnr-xilinx | Frecuencia máxima de cada reloj por encima de la de operación |
 | Tarjeta | Partidas completas en la Basys 3 | Controles, enlace, imagen, sonidos, displays y LED correctos |
 
@@ -932,6 +936,8 @@ make test        # los 14 testbenches, uno por uno
 make sim TB=top  # solo el sistema completo
 make programa    # vuelve a ensamblar sw/programa.s
 make synth       # síntesis genérica del top y chequeo de latches
+make lint        # linter Verilator sobre el top
+make post-sintesis  # programa real sobre el netlist de synth_xilinx (sección 10.7)
 make bitstream   # síntesis, colocación y ruteo con openXC7
 make flash       # graba el bitstream en la flash de la Basys 3
 ```
@@ -1043,6 +1049,21 @@ OK
 `Latch inferred`, y `proc` reporta 570 señales combinacionales revisadas sin latch. El netlist tiene
 10 memorias (`$mem_v2`), un `PLLE2_BASE` y dos `BUFG`, y ninguna celda de latch.
 
+**Linter (`make lint`).** `verilator --lint-only -Wall` sobre el top no da ningún aviso de latch
+(`LATCH`), de asignación con retardo en lógica combinacional (`COMBDLY`) ni de señal con más de un
+driver (`MULTIDRIVEN`). Los 23 avisos que da son de estilo, revisados uno por uno:
+
+| Aviso | Cantidad | Qué es |
+|---|---:|---|
+| `WIDTHEXPAND` | 8 | En `periferico_vga.sv` los contadores de 10 bits se comparan con constantes enteras de 32. Verilator extiende con ceros, que es lo correcto |
+| `UNUSEDSIGNAL` | 11 | Bits de `wdata_i` y `addr_i` que un periférico o una memoria no usa (el periférico de entradas no usa `write_enable_i` ni `wdata_i`, porque es de solo lectura), y señales del núcleo reutilizado que la plataforma no conecta: las habilitaciones por byte y de lectura, el reloj de `data_memory_interface` y bits de `funct7` que el control no necesita |
+| `UNUSEDPARAM` | 2 | Constantes de documentación (`COLUMNAS` del VGA y `SILENCIO` del secuenciador) |
+| `DECLFILENAME` | 1 | `generador_tono.sv` incluye el módulo auxiliar `contador_limpiable` |
+| `PINCONNECTEMPTY` | 1 | `prueba_vga.sv`, el top de prueba del VGA, deja `rdata_o` sin conectar |
+
+Verilator no conoce `PLLE2_BASE` ni `BUFG`, así que revisa `generador_relojes` con su modelo de
+simulación, que es la parte del diseño que no llega a la FPGA.
+
 **Implementación (`make bitstream`, nextpnr-xilinx).** Utilización del XC7A35T después de colocar
 y rutear:
 
@@ -1101,13 +1122,33 @@ Jugador 1, con los botones y el monitor VGA, y el Jugador 2, con la aplicación 
 
 ### 10.7 Simulación post-implementación temporizada
 
-El instructivo exige esta modalidad. Los bancos de la sección 10.1 son RTL y el modelo del PLL es
-conductual, así que no incluyen retardos de celdas y ruteo. El flujo abierto openXC7 no genera
-directamente un netlist con anotación SDF como el de Vivado, y esta simulación queda pendiente.
+El instructivo exige esta modalidad. Con el flujo abierto openXC7 no se puede hacer en la forma
+estricta: nextpnr-xilinx sí escribe un SDF con los retardos del diseño ruteado (`--sdf`), pero ese
+archivo describe sus celdas internas (`SLICE_LUTX`, `SLICE_FFX`, `SELMUX2_1`), que no tienen modelo
+de simulación. No hay un netlist simulable sobre el cual anotarlo, como el que genera Vivado.
 
-El plan para completarla es exportar el netlist ruteado, simularlo con los modelos de primitivas
-de Xilinx y ejecutar un escenario reducido de `tb_top` que incluya instrucciones del programa,
-acceso a RAM y periféricos y la validación de un disparo, con pase o fallo automático.
+La verificación después de la implementación se arma con dos partes:
+
+1. **Timing estático después del ruteo** (sección 10.5). nextpnr-xilinx analiza todos los caminos
+   del diseño ya colocado y ruteado: `clk_sys` llega a 44,39 MHz frente a 33,33 MHz de operación,
+   y `clk_pix` a 91,86 MHz frente a 25 MHz.
+2. **Simulación del netlist de síntesis** (`make post-sintesis`). El `top.json` que sale de
+   `synth_xilinx`, el mismo que recibe nextpnr, se escribe como Verilog de primitivas de la
+   Artix-7 (LUT1 a LUT6, FDRE, FDSE, CARRY4, MUXF7, MUXF8, RAM32M, RAM128X1D, RAM256X1S, BUFG y
+   PLLE2_BASE) y se simula con los modelos de esas primitivas de yosys (`cells_sim.v`). La ROM
+   queda como lógica con el programa real adentro. La `PLLE2_BASE` de yosys es una caja negra, así
+   que `src/sim/post_sintesis/PLLE2_BASE.v` la reemplaza con un modelo de comportamiento.
+
+El testbench `src/sim/post_sintesis/tb_post_sintesis.sv` solo mira pines, porque el netlist no
+conserva jerarquía. Cubre el arranque del programa desde la ROM, la colocación de las dos flotas
+con un rechazo de cada jugador (traslape con buzzer y barco repetido por UART), el inicio de la
+batalla y la validación de disparos: impacto del Jugador 1, fallo del Jugador 2 y un disparo
+repetido de cada uno, con pase o fallo automático en 21 chequeos. Sobre el RTL pasa 21 de 21.
+
+La corrida sobre el netlist es mucho más lenta que la del RTL (más de 15 minutos frente a 16 s
+para 31,5 ms de tiempo simulado) y su resultado no alcanzó a incluirse en esta versión del informe.
+Esta simulación tampoco tiene retardos: verifica que la síntesis conserva el comportamiento, y el
+timing lo cubre el análisis estático del punto 1.
 
 ---
 
@@ -1162,7 +1203,7 @@ pulsadores, que se comprobó en la tarjeta.
 | P11 | La tarjeta tardaba unos 6 s en cargar el diseño desde la flash después de PROG. | `velocidad_config.py` sube el reloj de configuración (CCLK) de unos 3 a 33 MHz en el bitstream. | Resuelto, carga en unos 0,5 s. |
 | P12 | Los testbenches no compilaban con Icarus 12. | Usar Icarus 13 y fijar la versión en el README. | Resuelto. |
 | P13 | Respuesta de colocación perdida en la PC (sección 7.4). | Conservar la colocación original del id tras el vencimiento. | Caso límite abierto, no ocurrió en las pruebas. |
-| P14 | Simulación post-implementación temporizada. | Netlist ruteado con modelos de primitivas (sección 10.7). | Pendiente. |
+| P14 | Simulación post-implementación temporizada. | El SDF de nextpnr no tiene netlist simulable. Timing estático después del ruteo más simulación del netlist de síntesis con `make post-sintesis` (sección 10.7). | Parcial, sin anotación de retardos. |
 
 ---
 
@@ -1188,7 +1229,8 @@ pulsadores, que se comprobó en la tarjeta.
   caso de la respuesta perdida (P13) puede desincronizar su vista.
 - La aplicación de PC requiere una terminal POSIX.
 - El barrido puede leer una palabra mientras se modifica, con un artefacto de un cuadro como máximo.
-- Falta la simulación post-implementación temporizada.
+- No hay simulación post-implementación con retardos anotados. Se cubre con timing estático y con
+  la simulación del netlist de síntesis.
 
 ### Mejoras posibles
 
