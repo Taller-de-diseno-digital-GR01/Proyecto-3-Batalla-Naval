@@ -1,15 +1,8 @@
 # PROGRAMA
 
-Programa en ensamblador `rv32i` que corre en `PROCESADOR_UNICICLO` desde la ROM. Este doc es el
-nivel 4 del programa. El nivel 3 ([`nivel03.md`](../diagramas/nivel03.md), sección "Programa en
-ensamblador") fija los registros base, la organización de la RAM, el protocolo UART y los
-diagramas de flujo de cada fase. Acá se baja un nivel más: cómo se divide el código, la
+Programa en ensamblador `rv32i` que corre en `PROCESADOR_UNICICLO` desde la ROM. Descripción de nivel 4 del programa donde se explica cómo se divide el código, la
 convención de llamado, el uso de la pila, el programa principal paso a paso y la ficha de cada
 subrutina.
-
-El instructivo (sección 4.7) pide documentar la organización de datos en RAM y la estructura del
-programa (subrutinas, convenciones de llamado y manejo de la pila). La organización de la RAM
-está en el nivel 3 y la estructura está en este doc.
 
 ---
 
@@ -21,7 +14,7 @@ la mapea en el bus de datos y un `lw` no la puede leer. Toda constante va como i
 variable se inicializa por código en la RAM.
 
 | Orden | Parte | Qué es |
-|---|---|---|
+| --- | --- | --- |
 | 1 | `INICIO` | Arranque por `rst_i`. Carga los registros base y pone en cero las partidas ganadas |
 | 2 | `PARTIDA` | Entrada de cada partida nueva, desde `INICIO` o desde `BTN_RST` |
 | 3 | `LAZO_COLOCACION` | Programa principal de la fase de colocación |
@@ -45,7 +38,7 @@ programa es una instrucción más que verificar en el testbench del núcleo y qu
 defensa. Por eso se agrega solo la que tiene una razón concreta:
 
 | Instrucción | ¿Se usa? | Por qué |
-|---|---|---|
+| --- | --- | --- |
 | `lui` | Sí | Cada dirección base (`s0`, `s1`, `s2`, `sp`) sale de una sola instrucción, y `li` sirve con cualquier constante |
 | `auipc` | No | Arma direcciones relativas al PC. La ROM mide 8 KB y `jal` llega a cualquier punto, y una etiqueta de la ROM no se puede leer con `lw` porque la ROM no está en el bus de datos |
 | `lb`, `lbu`, `lh`, `lhu`, `sb`, `sh` | No | La interfaz de los periféricos no tiene habilitación por byte, así que un `sb` escribiría la palabra completa con el dato corrido. Todas las variables ocupan una palabra |
@@ -90,7 +83,7 @@ código se cambia en un solo lugar, y el código se lee como el diseño.
 ### 2.1. Registros de periféricos (desplazamientos desde `s0 = 0x0001_0000`)
 
 | Nombre | Valor | Dirección | Uso |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `UART_CTRL` | `0x040` | `0x0001_0040` | `[0]` `send`, `[1]` `new_rx` |
 | `UART_TX` | `0x044` | `0x0001_0044` | Byte a transmitir |
 | `UART_RX` | `0x048` | `0x0001_0048` | Byte recibido |
@@ -104,7 +97,7 @@ código se cambia en un solo lugar, y el código se lee como el diseño.
 Son las de la tabla "Organización de la RAM" del nivel 3, con su desplazamiento.
 
 | Nombre | Valor | Nombre | Valor |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `TABLERO_J1` | `0x000` | `IMPACTOS_J1` | `0x220` |
 | `TABLERO_J2` | `0x100` | `IMPACTOS_J2` | `0x22C` |
 | `FASE` | `0x200` | `DISPAROS_J1` | `0x238` |
@@ -127,7 +120,7 @@ Así una sola rutina atiende a los dos jugadores sin repetir código.
 ### 2.3. Códigos
 
 | Grupo | Nombres y valores |
-|---|---|
+| --- | --- |
 | Bits de `BOTONES` | `BTN_ARRIBA = 0x01`, `BTN_ABAJO = 0x02`, `BTN_IZQ = 0x04`, `BTN_DER = 0x08`, `BTN_SEL = 0x10`, `BTN_OK = 0x20`, `BTN_RST = 0x40`, y `BTN_FLECHAS = 0x0F` |
 | Colores del VGA | `C_AGUA = 0`, `C_BARCO = 1`, `C_IMPACTO = 2`, `C_FALLO = 3`, `C_CURSOR = 4`, `C_FONDO = 5`, `C_J1 = 6`, `C_J2 = 7` |
 | Palabra de video | `BORDE = 8` (bit 3, línea del grid), `CAR_DESPL = 4` (el carácter va en `[9:4]`) |
@@ -157,7 +150,7 @@ Es la convención estándar de RISC-V, recortada a lo que usa este programa.
 ### 3.1. Registros
 
 | Registro | Nombre ABI | Uso en el programa | ¿Quién lo preserva? |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `x0` | `zero` | Constante cero | No cambia |
 | `x1` | `ra` | Dirección de retorno | La subrutina que llama a otra lo guarda en la pila |
 | `x2` | `sp` | Puntero de pila | Cada subrutina lo deja como lo encontró |
@@ -253,7 +246,7 @@ es tablero ni texto se pinta con `C_FONDO`.
 ### 4.1. Dirección de una casilla
 
 | Qué | Fórmula |
-|---|---|
+| --- | --- |
 | Casilla `(fp, cp)` de la pantalla | `s1 + 4 × (fp × 20 + cp)` |
 | Casilla `(f, c)` del tablero del jugador `j` | `fp = 3 + f` y `cp = 1 + 10 × j + c` |
 
@@ -262,7 +255,7 @@ Sin `mul`, `fp × 20 = (fp << 4) + (fp << 2)` y `10 × j = (j << 3) + (j << 1)`.
 ### 4.2. Qué muestra el HUD en cada fase
 
 | Fase | Fila 1 | Filas 11 a 13 |
-|---|---|---|
+| --- | --- | --- |
 | Colocación | Columnas 1 a 8 en `C_J1` con `COLOCA` mientras el Jugador 1 no termina, y columnas 11 a 18 en `C_J2` con `COLOCA` mientras el Jugador 2 no termina. Cada barra pasa a `C_FONDO` con `LISTO` cuando ese jugador completa su flota | Fila 12: `COLOQUEN SUS BARCOS` |
 | Batalla, turno del Jugador 1 | Columnas 0 a 19 en `C_J1` con `TURNO JUGADOR 1` | Fila 12: `USE FLECHAS Y SW0` |
 | Batalla, turno del Jugador 2 | Columnas 0 a 19 en `C_J2` con `TURNO JUGADOR 2` | Fila 12: `ESPERANDO A LA PC` |
@@ -350,7 +343,7 @@ El programa principal guarda su estado de vuelta en registros `s*`, que las subr
 preservan:
 
 | Registro | Contenido |
-|---|---|
+| --- | --- |
 | `s3` | Flancos de los botones de esta vuelta, salida de `LEER_BOTONES` |
 | `s4` | TIPO de la trama que llegó completa y válida en esta vuelta, o 0 si no llegó ninguna |
 | `s5`, `s6` | `D1` y `D2` de esa trama |
@@ -577,7 +570,7 @@ flowchart LR
 ### 6.1. Resumen
 
 | Subrutina | Entradas | Salida | Llama a | Marco |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `DIR_TABLERO` | `a0` jugador, `a1` fila, `a2` columna | `a0` dirección en RAM | | Hoja |
 | `DIR_VGA_TABLERO` | `a0` jugador, `a1` fila, `a2` columna | `a0` dirección en video | | Hoja |
 | `LEER_BOTONES` | | `a0` flancos | | Hoja |
@@ -675,7 +668,7 @@ los chequeos del nivel 3. Si alguno falla devuelve `a0 = 0`. Si pasan todos devu
 D2.
 
 | TIPO | Chequeos |
-|---|---|
+| --- | --- |
 | Cualquiera | `TIPO xor D1 xor D2` es igual a la verificación |
 | `MSG_COLOCAR` | `(D1 & 0x7C) == 0`, `(D1 & 3) != 3` y `(D2 & 0x88) == 0` |
 | `MSG_DISPARO` | `(D1 & 0x88) == 0` y `D2 == 0` |
@@ -780,7 +773,7 @@ El LED, el HUD y la trama de Estado colocación los pone `PARTIDA` después de l
 ## 7. Casos de borde
 
 | Caso | Qué hace el programa |
-|---|---|
+| --- | --- |
 | `BTN_RST` apretado por mucho tiempo | Un solo reinicio, por el paso 2 de `NUEVA_PARTIDA` |
 | `BTN_RST` durante una melodía | `NUEVA_PARTIDA` la corta con `SND_SILENCIO` |
 | `BTN_RST` mientras la PC manda una trama | Los bytes que ya llegaron se pierden con `RX_INDICE = 0`. La PC recibe Estado colocación y reinicia su vista |
