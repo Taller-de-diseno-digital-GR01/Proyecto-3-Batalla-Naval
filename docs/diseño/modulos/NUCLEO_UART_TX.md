@@ -135,7 +135,10 @@ Se genera con `TICKS_BIT = 4`, dato de 2 bits e `indice` de 1 bit. Con los valor
 ancho de los contadores y la cantidad de copias del mux de datos, no la estructura.
 
 `cuenta_tick` se dibuja de 2 bits. En el `.sv` está declarado como `int`, y yosys lo sintetiza como un
-contador de 32 bits aunque nunca pase de 867. TODO: Revisar si se cambia a `logic [$clog2(TICKS_BIT)-1:0]`.
+contador de 32 bits aunque nunca pase de 288 (`TICKS_BIT = 289` con `clk_i` de 33,33 MHz). Se deja
+como `int` porque así viene del núcleo del curso, y el sistema completo usa cerca del 23 % de las LUT
+de la XC7A35T y cierra *timing* con holgura. Declararlo como `logic [$clog2(TICKS_BIT)-1:0]`
+ahorraría compuertas sin cambiar el comportamiento.
 
 ## j) Diagrama completo de conexiones del diseño
 

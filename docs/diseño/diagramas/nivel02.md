@@ -62,7 +62,7 @@ flowchart TD
 
 Saca del único reloj de 100 MHz los dos relojes del sistema, `clk_i` de 33,33 MHz para el procesador, las memorias y los periféricos, y `clk_pix` de 25 MHz para el VGA. Es el módulo `generador_relojes.sv`, y en `top.sv` la red de `clk_i` se llama `clk_sys`. Con openXC7 no hay Clocking Wizard, así que la primitiva `PLLE2_BASE` se instancia a mano. El VCO corre a 1000 MHz (100 MHz × 10), y las dos salidas son divisiones enteras de él, 1000 / 30 = 33,33 MHz y 1000 / 40 = 25 MHz. Como salen del mismo VCO quedan relacionados en fase, que es lo que usa `PERIFERICO_VGA.md` para justificar el cruce de dominios. No hace falta un MMCM, porque no se usa desplazamiento fino de fase ni divisores fraccionarios.
 
-**Por qué 33,33 MHz.** El enunciado exige una sola entrada de 100 MHz y que todo reloj derivado salga de un PLL, pero no fija la frecuencia de `clk_i`. En un uniciclo cada instrucción se completa en un solo ciclo, así que el periodo lo pone el camino de un `lw`: `PC`, ROM, banco de registros, ALU, controlador de mapeo, RAM o periférico, multiplexor de lectura y escritura en el banco. Con el sistema integrado, nextpnr-xilinx da entre 39 y 50 MHz de máximo para `clk_i`, según cómo quede la colocación. 100 MHz es imposible y 40 MHz queda sin margen en las peores colocaciones. Con 1000 / 30 = 33,33 MHz el periodo es de 30 ns, unos 4 ns más que el camino crítico de la peor colocación medida (39 MHz, 25,6 ns), así que cierra timing en todas. También le sirve a la UART: el receptor sobremuestrea con `TICKS_X16 = 18` y queda con 0,47 % de error, el mismo que a 100 MHz (a 40 MHz serían 22 y 1,4 %).
+**Por qué 33,33 MHz.** El enunciado exige una sola entrada de 100 MHz y que todo reloj derivado salga de un PLL, pero no fija la frecuencia de `clk_i`. En un uniciclo cada instrucción se completa en un solo ciclo, así que el periodo lo pone el camino de un `lw`: `PC`, ROM, banco de registros, ALU, controlador de mapeo, RAM o periférico, multiplexor de lectura y escritura en el banco. Con el sistema integrado, nextpnr-xilinx da entre 39 y 50 MHz de máximo para `clk_i`, según cómo quede la colocación (44,39 MHz después del ruteo en la versión final). 100 MHz es imposible y 40 MHz queda sin margen en las peores colocaciones. Con 1000 / 30 = 33,33 MHz el periodo es de 30 ns, unos 4 ns más que el camino crítico de la peor colocación medida (39 MHz, 25,6 ns), así que cierra timing en todas. También le sirve a la UART: el receptor sobremuestrea con `TICKS_X16 = 18` y queda con 0,47 % de error, el mismo que a 100 MHz (a 40 MHz serían 22 y 1,4 %).
 
 El costo es que la vuelta más larga del programa sin leer la UART tarda 111 µs, más que los 87 µs que tarda en llegar un byte. Por eso la aplicación de PC deja 1 ms entre los bytes de una trama. El detalle está en [`PROGRAMA.md`](../modulos/PROGRAMA.md), sección 4.3.
 
@@ -72,6 +72,10 @@ El enunciado también deja abierta la opción de sacar un reloj aparte para la U
 - Salidas, `clk_i` de 33,33 MHz hacia todos los bloques, `clk_pix` de 25 MHz hacia `PERIFERICO_VGA` y `locked`, que negado es el `rst_i` de todos los bloques.
 
 No hay pin de reset. El reinicio general es el botón PROG de la Basys 3, que vuelve a configurar la FPGA desde la flash, y `rst_i` queda en alto hasta que el PLL engancha. `~locked` pasa por dos flip-flops en `clk_i` antes de llegar a los bloques.
+
+Las entradas `RST` y `PWRDWN` de la `PLLE2_BASE` quedan sin conectar, no atadas a `1'b0`. Con una constante, nextpnr-xilinx rutea el pin y escribe mal su bit de inversión (`ZINV_RST`), y el PLL queda en reinicio para siempre, sin `locked` y sin salidas. Eso se vio en la tarjeta. Sin conectar es como usa la primitiva LiteX con este mismo flujo, y equivale a dejarlas en cero.
+
+Para que PROG funcione como reinicio, el bitstream se graba en la flash (`make flash`) y el jumper JP1 queda en QSPI. Con la configuración por defecto la FPGA lee la flash a unos 3 MHz y tarda unos 6 s en cargar el diseño, todo ese tiempo sin VGA ni displays. `make bitstream` pasa el `.bit` por `src/fpga/velocidad_config.py`, que sube esa lectura a 33 MHz (el mismo valor que pone Vivado con `BITSTREAM.CONFIG.CONFIGRATE 33`), y la carga baja a unos 0,5 s.
 
 ### Bloque 2: Procesador uniciclo
 
@@ -146,6 +150,8 @@ Genera los sonidos de colocación inválida, impacto, fallo, barco hundido y vic
 ### Elemento externo: Aplicación de PC
 
 Permite al Jugador 2 elegir acciones y ver sus tableros, turno y resultados. Se comunica con la FPGA por UART y no decide reglas ni recibe ubicaciones ocultas del Jugador 1.
+
+Es `sw/batalla_pc.py`, en Python con `pyserial`, y corre en una terminal de Linux, macOS o WSL (lee el teclado con `termios`). Se divide en `enlace.py` (puerto serie y 1 ms entre bytes), `protocolo.py` (armado y decodificación de tramas), `partida.py` (lo que la PC recuerda para dibujar, a partir de las respuestas de la FPGA), `vista.py` y `dibujo.py` (los dos tableros, escalados al tamaño de la terminal) y `terminal.py` (teclado sin eco). Las flechas o `h`, `j`, `k`, `l` mueven el cursor, `r` rota el barco, `Enter` coloca o dispara y `Esc` sale. Manda una trama por vez y espera su respuesta hasta 2 s antes de dejar reintentar.
 
 ### Interfaz principal
 

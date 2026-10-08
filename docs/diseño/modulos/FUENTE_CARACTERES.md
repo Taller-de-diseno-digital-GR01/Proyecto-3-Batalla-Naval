@@ -8,8 +8,8 @@ FUENTE_CARACTERES, módulo `fuente_caracteres` en `src/design/fuente_caracteres.
 
 ```mermaid
 flowchart LR
-    IN_COD(["codigo_i[5:0]<br/>(caracter de la casilla)"]) --> FUE["FUENTE_CARACTERES<br/>ROM combinacional 5 × 7"]
-    IN_FILA(["fila_i[2:0]<br/>(glifo_fila_d)"]) --> FUE
+    IN_COD(["codigo_i[5:0]<br/>(caracter o caracter2 de la casilla)"]) --> FUE["FUENTE_CARACTERES<br/>ROM combinacional 5 × 7"]
+    IN_FILA(["fila_i[2:0]<br/>(glifo_fila)"]) --> FUE
     FUE --> OUT(["bits_o[4:0]<br/>(al selector de píxel)"])
 ```
 
@@ -23,7 +23,7 @@ No sabe dónde está la casilla ni de qué color es. Solo guarda dibujos.
 
 ## d) Entradas
 
-- `codigo_i[5:0]`, código del carácter en ASCII − 32, desde el registro `caracter` del puerto B de
+- `codigo_i[5:0]`, código del carácter en ASCII − 32, desde los registros `caracter` o `caracter2` del puerto B de
   la memoria de video. `0` es el espacio.
 - `fila_i[2:0]`, fila del glifo, de 0 (arriba) a 7. La 7 siempre sale en blanco.
 
@@ -34,10 +34,12 @@ No sabe dónde está la casilla ni de qué color es. Solo guarda dibujos.
 
 ## f) Relación con otros módulos
 
-Solo lo instancia `PERIFERICO_VGA`, como `u_fuente`. `codigo_i` le llega del registro `caracter`
-(bits `[9:4]` de la palabra de la casilla) y `fila_i` de `glifo_fila_d`, que es `v_count[4:2]`
-atrasado un ciclo. `bits_o` va al multiplexor que elige el punto de la columna `glifo_col_d`, y de
-ahí al selector de píxel.
+Solo lo instancia `PERIFERICO_VGA`, como `u_fuente`. `codigo_i` le llega de `caracter` (bits `[9:4]`
+de la palabra de la casilla) o de `caracter2` (bits `[15:10]`), según la mitad de la casilla que
+se está barriendo y el bit `centrado`. `fila_i` le llega de `glifo_fila`, que es `v_count[4:1]`
+atrasado un ciclo menos 5. `bits_o` va al multiplexor que elige el punto de la columna
+`glifo_col`, y de ahí al selector de píxel. La fuente es una sola y la comparten las dos mitades,
+porque en cada píxel solo se dibuja una.
 
 El testbench `tb_periferico_vga` también lo instancia, una vez y por separado, para leer la tabla
 completa al arrancar y usarla en su modelo.
@@ -58,8 +60,8 @@ fila 6   10001    #...#
 fila 7   00000    .....
 ```
 
-El periférico amplía cada punto a 4 × 4 píxeles, así que la letra mide 20 × 28 píxeles dentro de
-la casilla de 32 × 32.
+El periférico amplía cada punto a 2 × 2 píxeles, así que la letra mide 10 × 14 píxeles y entran
+dos por casilla de 32 × 32, una en cada mitad.
 
 ## h) Diseño
 
@@ -81,8 +83,9 @@ tocar el periférico ni el programa.
 ### La fuente
 
 Es una fuente de 5 × 7 del mismo estilo que la de las pantallas de caracteres tipo HD44780. Se
-eligió 5 × 7 porque, ampliada × 4, llena casi toda la casilla y se lee bien desde lejos, y porque
-ampliar × 4 es tomar `h_count[4:2]` y `v_count[4:2]`, sin divisor.
+eligió 5 × 7 porque, ampliada × 2, entran dos letras por casilla y 40 por fila de pantalla, que es
+lo que necesitan los mensajes del HUD, y se sigue leyendo bien desde lejos. Ampliar × 2 es tomar
+`h_count[4:1]` y `v_count[4:1]`, sin divisor.
 
 ### Implementación
 
@@ -109,8 +112,8 @@ No tiene puertos hacia pines de la Basys 3, así que no agrega nada a `src/fpga/
 
 Conexiones dentro de `PERIFERICO_VGA`, instancia `u_fuente`:
 
-- `codigo_i`, a `caracter`.
-- `fila_i`, a `glifo_fila_d`.
+- `codigo_i`, a `codigo`, que es `caracter` o `caracter2` según la mitad de la casilla y `centrado`.
+- `fila_i`, a `glifo_fila[2:0]`.
 - `bits_o`, a `glifo_bits`.
 
 Igual que en los demás módulos, el diagrama por chips que pide el método no aplica a un diseño que se
