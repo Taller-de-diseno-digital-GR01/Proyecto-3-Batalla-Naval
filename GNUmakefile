@@ -167,8 +167,13 @@ programa:
 
 # $(PROG_HEX) está en los prerrequisitos de la síntesis porque la ROM lo lee con $readmemh:
 # si falta se genera, y si cambia se vuelve a sintetizar
+#
+# read_verilog -lib carga las primitivas de Xilinx (BUFG, PLLE2_BASE de generador_relojes) como
+# cajas negras. Sin eso hierarchy -check corta en el top porque no las encuentra. synth_xilinx,
+# el de make bitstream, ya las carga solo
 $(NETLIST_OUT): $(DESIGN_SRCS) $(PROG_HEX) $(TOOLCHAIN_STAMP) | $(BUILD_DIR)
 	@$(YOSYS) -p " \
+		read_verilog -lib +/xilinx/cells_sim.v +/xilinx/cells_xtra.v; \
 		read_verilog -sv $(DESIGN_SRCS); \
 		hierarchy -check -top $(SYNTH_TOP); \
 		proc; opt; \
