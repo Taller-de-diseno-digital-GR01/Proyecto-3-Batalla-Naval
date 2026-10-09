@@ -9,6 +9,9 @@ src/build/
 
 # Artefactos de sesion de Vivado (batch mode, generados en el cwd al invocarlo)
 .Xil/
+# Proyectos que crea la GUI de Vivado, cada quien tiene el suyo
+project_3_battleship/
+*.xpr
 *.jou
 *.log
 *.tcl
