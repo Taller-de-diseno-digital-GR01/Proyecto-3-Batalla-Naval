@@ -1095,7 +1095,9 @@ es la memoria de video, analizado en la sección 6.4.
 ### 10.6 Resultados funcionales en la FPGA
 
 El sistema completo se cargó en la Basys 3 desde la flash y se jugaron partidas completas entre el
-Jugador 1, con los botones y el monitor VGA, y el Jugador 2, con la aplicación de PC.
+Jugador 1, con los botones y el monitor VGA, y el Jugador 2, con la aplicación de PC. La
+demostración está en el
+[video de comprobación](https://estudianteccr-my.sharepoint.com/personal/mcoghi_estudiantec_cr/_layouts/15/stream.aspx?id=%2Fpersonal%2Fmcoghi%5Festudiantec%5Fcr%2FDocuments%2FITCR%2F2026%2FSemestre%20II%2FTaller%20de%20dise%C3%B1o%20digital%2Fvideo%5Fcomprobacion%2DGR01%2Emp4&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&ga=1&referrer=StreamWebApp%2EWeb&referrerScenario=AddressBarCopied%2Eview%2Ee62e6088%2D6583%2D4563%2D90d1%2D1f4e5d9ba631).
 
 | Evidencia | Qué se comprobó | Resultado |
 |---|---|---|
