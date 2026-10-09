@@ -169,6 +169,14 @@ module tb_top_temporizado;
     end
   endtask
 
+  // Copias de los cables internos para la onda: xsim no acepta cables del netlist como argumento de
+  // $dumpvars, y asi quedan en el nivel del testbench
+  wire        obs_clk_sys = dut.clk_sys;
+  wire        obs_rst = dut.rst;
+  wire [12:0] obs_pc = {dut.prog_address[12:2], 2'b00};
+  wire [31:0] obs_instr = {dut.prog_in[31:2], 2'b11};
+  wire [2:0]  obs_sonido = dut.buzzer_dout[2:0];
+
   // ---------------------------------------------------------------- ejecucion del programa
 
   // Copia del programa para comparar lo que sale de la ROM del netlist
@@ -190,13 +198,15 @@ module tb_top_temporizado;
     logic [12:0] imm_j, imm_b;
     imm_j = {i[12], i[20], i[30:21], 1'b0};
     imm_b = {i[31], i[7], i[30:25], i[11:8], 1'b0};
+    // Con if y no con ?: entre "" y $sformatf, que hace caer a Icarus 13 (assertion en draw_eval_vec4)
     case (i[6:0])
-      7'b1101111: return (pc_sig === 13'(pc + imm_j)) ? "" : $sformatf("jal a %04h", 13'(pc + imm_j));
-      7'b1100011: return (pc_sig === 13'(pc + 4) || pc_sig === 13'(pc + imm_b)) ? "" :
-                         $sformatf("branch a %04h o %04h", 13'(pc + 4), 13'(pc + imm_b));
-      7'b1100111: return "";
-      default:    return (pc_sig === 13'(pc + 4)) ? "" : $sformatf("%04h", 13'(pc + 4));
+      7'b1101111: if (pc_sig !== 13'(pc + imm_j)) return $sformatf("jal a %04h", 13'(pc + imm_j));
+      7'b1100011: if (pc_sig !== 13'(pc + 4) && pc_sig !== 13'(pc + imm_b))
+                    return $sformatf("branch a %04h o %04h", 13'(pc + 4), 13'(pc + imm_b));
+      7'b1100111: ;
+      default:    if (pc_sig !== 13'(pc + 4)) return $sformatf("%04h", 13'(pc + 4));
     endcase
+    return "";
   endfunction
 
   always @(posedge dut.clk_sys) begin
@@ -243,7 +253,6 @@ module tb_top_temporizado;
     // Solo el arranque y el disparo del Jugador 1 van a la onda, el archivo queda manejable
     $dumpfile("tb_top_temporizado.vcd");
     $dumpvars(1, tb_top_temporizado);
-    $dumpvars(0, dut.clk_sys, dut.rst, dut.prog_address, dut.prog_in, dut.buzzer_dout);
 
     #100;
     anotar("el sistema arranca en reinicio mientras el PLL no engancha", dut.rst === 1'b1,
