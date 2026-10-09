@@ -57,13 +57,15 @@ de registros, y 25 MHz para el barrido de video de 640 × 480. El periférico VG
 de 20 × 15 casillas de 32 × 32 píxeles, con color, bordes y texto, en lugar de un framebuffer por
 píxel. El programa ocupa 1264 palabras de instrucción, equivalentes a 5056 bytes o 61,72 % de la ROM.
 
-Los 14 testbenches autoverificables del hardware pasan sin fallos, entre ellos las 29 pruebas
+Los 15 testbenches autoverificables del hardware pasan sin fallos, entre ellos las 29 pruebas
 rv32ui del procesador y las 82 verificaciones del sistema completo, que juegan una partida entera
 con el programa real. También pasan las 18 pruebas unitarias de la aplicación de PC. La síntesis
-no infiere latches. Después de colocar y rutear, el diseño ocupa 4701 LUT (22,6 % del XC7A35T) y
-`clk_sys` alcanza 44,39 MHz frente a los 33,33 MHz de operación. El sistema completo se probó en la
+no infiere latches. Después de colocar y rutear, el diseño ocupa 4788 LUT (23,0 % del XC7A35T) y
+`clk_sys` alcanza 37,92 MHz frente a los 33,33 MHz de operación. El sistema completo se probó en la
 Basys 3, cargado desde la flash, con partidas completas entre los dos jugadores. La simulación
-post-implementación temporizada queda pendiente (sección 10.7).
+post-implementación temporizada, sobre el netlist ruteado por Vivado con sus retardos, ejecuta el
+arranque del programa, la colocación de las dos flotas y un disparo de cada jugador, y pasa sus 19
+verificaciones sin violaciones de setup ni de hold (sección 10.7).
 
 ---
 
@@ -922,14 +924,16 @@ criterio automático de pase.
 | Integración | `tb_top` con ROM real | Tramas, tableros, HUD, LED, display y resultado coherentes durante la partida |
 | Síntesis | `make synth` con yosys | Ningún `Latch inferred` en el log ni latch en el netlist |
 | Implementación | nextpnr-xilinx | Frecuencia máxima de cada reloj por encima de la de operación |
+| Post-implementación | `tb_top_temporizado` sobre el netlist de Vivado con SDF, en xsim | Programa, colocación y disparos correctos, sin violaciones de setup ni de hold |
 | Tarjeta | Partidas completas en la Basys 3 | Controles, enlace, imagen, sonidos, displays y LED correctos |
 
 **Reproducción, desde la raíz del repositorio:**
 
 ```sh
 make test-app    # pruebas de la app de PC
-make test        # los 14 testbenches, uno por uno
+make test        # los 15 testbenches, uno por uno
 make sim TB=top  # solo el sistema completo
+make sim-post    # simulación post-implementación temporizada con Vivado, cerca de una hora
 make programa    # vuelve a ensamblar sw/programa.s
 make synth       # síntesis genérica del top y chequeo de latches
 make bitstream   # síntesis, colocación y ruteo con openXC7
@@ -937,7 +941,8 @@ make flash       # graba el bitstream en la flash de la Basys 3
 ```
 
 Herramientas: Icarus Verilog 13.0, yosys 0.69 y nextpnr-xilinx del toolchain openXC7,
-openFPGALoader, binutils de GNU para RISC-V y Python 3 con `pyserial`. Los testbenches usan
+openFPGALoader, binutils de GNU para RISC-V y Python 3 con `pyserial`. La simulación
+post-implementación usa Vivado 2026.1 y xsim. Los testbenches usan
 `return` dentro de tasks y literales de arreglo `'{...}`, que Icarus 12 no acepta, por eso el
 README fija la versión 13.
 
@@ -970,6 +975,7 @@ el resto se comprobó jugando en la tarjeta.
 | `tb_ram` | 1174 | Pasa |
 | `tb_rom` | 123 | Pasa |
 | `tb_top` | 82 | Pasa |
+| `tb_top_temporizado` | 19 | Pasa en RTL y sobre el netlist post-implementación (sección 10.7) |
 | `tb_uart_rx` | 20 | Pasa |
 | `tb_uart_tx` | 18 | Pasa |
 | Aplicación de PC | 18 pruebas unitarias | Pasa |
@@ -1048,9 +1054,9 @@ y rutear:
 
 | Recurso | Usado | Disponible en el XC7A35T | Porcentaje |
 |---|---:|---:|---:|
-| LUT (lógica y memoria distribuida) | 4701 | 20 800 | 22,6 % |
+| LUT (lógica y memoria distribuida) | 4788 | 20 800 | 23,0 % |
 | Flip-flops | 385 | 41 600 | 0,9 % |
-| CARRY4 | 119 | 8150 | 1,5 % |
+| CARRY4 | 124 | 8150 | 1,5 % |
 | BRAM | 0 | 50 | 0 % |
 | PLL | 1 | 5 | 20 % |
 | BUFG | 2 | 32 | 6,3 % |
@@ -1068,18 +1074,20 @@ Frecuencias máximas reportadas por nextpnr-xilinx después del ruteo:
 
 | Reloj | Frecuencia de operación | Período | Frecuencia máxima | Período mínimo | Holgura |
 |---|---:|---:|---:|---:|---:|
-| `clk_sys` | 33,33 MHz | 30,0 ns | 44,39 MHz | 22,53 ns | 7,47 ns |
-| `clk_pix` | 25 MHz | 40,0 ns | 91,86 MHz | 10,89 ns | 29,11 ns |
+| `clk_sys` | 33,33 MHz | 30,0 ns | 37,92 MHz | 26,37 ns | 3,63 ns |
+| `clk_pix` | 25 MHz | 40,0 ns | 85,46 MHz | 11,70 ns | 28,30 ns |
 
-El camino crítico de `clk_sys` arranca en el registro del PC (`prog_address`), pasa por la ROM, la
-decodificación y la ALU, y llega a un flip-flop del sistema. Son 3,40 ns de lógica y 19,13 ns de
-ruteo: el 85 % del período mínimo es ruteo, por la cantidad de LUT que ocupan las memorias
-combinacionales y el recorrido entre ellas. La estimación antes de rutear era de 53,87 MHz.
+El camino crítico de `clk_sys` es el de un branch: arranca en el registro del PC (`prog_address`),
+pasa por la ROM, la lectura del banco de registros y la comparación de la ALU, y vuelve al PC por
+`next_pc`. Son 2,90 ns de lógica y 23,30 ns de ruteo: el 88 % del período mínimo es ruteo, por la
+cantidad de LUT que ocupan las memorias combinacionales y el recorrido entre ellas. La estimación
+antes de rutear era de 35,90 MHz.
 
-En corridas anteriores, con otras colocaciones, `clk_sys` dio entre 39 y 50 MHz. La frecuencia de
-33,33 MHz se eligió para conservar margen en la peor de esas corridas (39 MHz, 25,6 ns), y todas
-pasan. Si alguna corrida diera menos de 33,33 MHz, el siguiente paso es 1000 / 32 = 31,25 MHz, que
-conserva un error bajo en la UART.
+La frecuencia máxima cambia entre versiones del diseño, porque cada cambio en el RTL o en el
+programa mueve la colocación. Con versiones anteriores, `clk_sys` dio entre 39 y 50 MHz, y con la
+versión final da 37,92 MHz. La frecuencia de 33,33 MHz deja margen en todas esas corridas. Si
+alguna diera menos de 33,33 MHz, el siguiente paso es 1000 / 32 = 31,25 MHz, que conserva un error
+bajo en la UART.
 
 El reporte da la frecuencia de cada dominio por separado. El único cruce de datos entre dominios
 es la memoria de video, analizado en la sección 6.4.
@@ -1101,13 +1109,153 @@ Jugador 1, con los botones y el monitor VGA, y el Jugador 2, con la aplicación 
 
 ### 10.7 Simulación post-implementación temporizada
 
-El instructivo exige esta modalidad. Los bancos de la sección 10.1 son RTL y el modelo del PLL es
-conductual, así que no incluyen retardos de celdas y ruteo. El flujo abierto openXC7 no genera
-directamente un netlist con anotación SDF como el de Vivado, y esta simulación queda pendiente.
+El instructivo pide una simulación post-implementación temporizada del sistema que cubra al menos
+la ejecución de un fragmento representativo del programa y la validación de un disparo. Los bancos
+de la sección 10.1 son RTL y usan el modelo conductual del PLL, sin retardos de celdas ni de ruteo.
+openXC7 no exporta un netlist que se pueda simular con los modelos de primitivas de Xilinx, así que
+para esta simulación se usó Vivado 2026.1: implementación, netlist temporizado
+(`write_verilog -mode timesim` y `write_sdf`) y simulación con xsim. Todo el flujo corre con
+`make sim-post` (script `src/fpga/vivado_timesim.tcl`).
 
-El plan para completarla es exportar el netlist ruteado, simularlo con los modelos de primitivas
-de Xilinx y ejecutar un escenario reducido de `tb_top` que incluya instrucciones del programa,
-acceso a RAM y periféricos y la validación de un disparo, con pase o fallo automático.
+**Implementación.** `synth_design`, `opt_design`, `place_design` y `route_design` para el
+xc7a35tcpg236-1 con `src/fpga/basys3.xdc` y la ROM cargada con el `programa.hex` real:
+
+| Métrica | Valor |
+|---|---|
+| WNS (setup), `clk_sys` | +5,026 ns (máximo equivalente de 40,0 MHz) |
+| WNS (setup), `clk_pix` | +29,386 ns |
+| WHS (hold) | +0,046 ns |
+| Endpoints con violación | 0 de 11 179 |
+| LUT (lógica / memoria) | 3067 (1999 / 1068), 14,7 % |
+| Flip-flops | 387 |
+| BRAM | 0 |
+| Resultado | *All user specified timing constraints are met* |
+
+El camino crítico de `clk_sys` es del mismo tipo que el que reporta nextpnr-xilinx en la sección
+10.5: arranca en el registro del PC (`program_counter/value_reg[3]`) y cruza la ROM, la
+decodificación y la ALU. En Vivado termina en una escritura del banco de registros y en nextpnr en
+el PC. Son 24,6 ns con 18 niveles de lógica, y el 84 % es ruteo.
+
+**Testbench.** `tb_top` no sirve sobre el netlist: lee la RAM (`dut.u_ram.mem`) y la memoria de video,
+y después de implementar esas memorias quedan repartidas en primitivas LUTRAM sin esos nombres. Por
+eso se escribió `src/sim/tb_top_temporizado.sv`, que solo usa los pines del `top` y los cables que
+conservan su nombre en el netlist (`rst`, `clk_sys`, `prog_address`, `prog_in`, `buzzer_dout`). Hace
+de Jugador 1 con los botones y de aplicación de PC por la UART, igual que `tb_top`, y verifica:
+
+1. **Fragmento del programa.** En cada flanco de `clk_sys` después del reinicio compara la
+   instrucción que sale de la ROM con `programa.hex` en la dirección del PC, y revisa que el PC
+   siguiente salga de esa instrucción: PC + 4, el destino de un `jal` o una de las dos salidas de un
+   branch (`jalr` no se revisa porque su destino depende de un registro). Con los retardos del
+   netlist, esto confirma que la ROM y la lógica del PC se estabilizan dentro del ciclo. Imprime
+   las primeras 12 instrucciones.
+2. **Arranque.** La primera trama `Estado` de colocación, el LED en `001` y los displays en `00 00`.
+3. **Colocación.** El Jugador 1 coloca su flota con los botones (filas 0, 1 y 2) y el Jugador 2 por
+   la UART (filas 0, 2 y 4). Con el último barco llegan las tramas de inicio de batalla y del turno
+   del Jugador 1, y el LED pasa a `010`.
+4. **Validación de disparos.** El Jugador 1 dispara en (0,0), donde está el barco 0 del Jugador 2:
+   la respuesta es impacto, el registro del buzzer queda en el sonido de impacto y el turno pasa al
+   Jugador 2. El Jugador 2 dispara en (5,5), que es agua: la respuesta es fallo, suena el fallo y
+   el turno vuelve al Jugador 1.
+
+La misma prueba corre sobre el RTL con `make sim TB=top_temporizado`, en unos 20 s, como referencia.
+
+**UART más rápida.** Sobre el netlist con retardos, xsim avanza unos 0,86 µs simulados por segundo.
+A 115 200 baudios cada trama de 5 bytes dura 434 µs, y el escenario completo necesitaba 10,5 ms
+simulados: más de tres horas por corrida. Por eso la velocidad de la UART se volvió un parámetro
+del `top` (`BAUDIOS`, 115 200 por defecto) y esta implementación se hizo con
+`-generic BAUDIOS=694444`. A 33,33 MHz eso da `TICKS_BIT = 48` y `TICKS_X16 = 3`, y como 16 × 3 = 48
+el receptor muestrea sin error acumulado. El bitstream de la tarjeta se genera siempre con 115 200.
+La única diferencia entre los dos netlists es la constante de los contadores de bit de la UART, y el
+procesador, la ROM, la RAM, el AT y los periféricos son los mismos. El testbench también acorta las
+pulsaciones a 150 µs: alcanza, porque la vuelta más larga del lazo del programa, un repintado del
+tablero, dura unos 100 µs.
+
+**Resultado.** Simulación de 3,25 ms del sistema completo con los retardos post-ruteo (SDF), en
+58 minutos:
+
+```text
+ok el sistema arranca en reinicio mientras el PLL no engancha
+  el reinicio baja en 611 ns
+ok la primera instruccion despues del reinicio es la de la direccion 0
+  instruccion  0: PC 0000  00010437
+  instruccion  1: PC 0004  000114b7
+  instruccion  2: PC 0008  00002937
+  instruccion  3: PC 000c  24092423
+  instruccion  4: PC 0010  12042823
+  instruccion  5: PC 0014  04042023
+  instruccion  6: PC 0018  00003137
+  instruccion  7: PC 001c  348010ef
+  instruccion  8: PC 1364  ffc10113
+  instruccion  9: PC 1368  00112023
+  instruccion 10: PC 136c  24892383
+  instruccion 11: PC 1370  00090293
+ok la primera trama es Estado, fase de colocacion
+ok el LED marca la fase de colocacion
+ok el display muestra 00 00 de partidas ganadas
+ok el barco 0 del Jugador 2 se acepta
+ok el barco 1 del Jugador 2 se acepta
+ok el barco 2 del Jugador 2 se acepta
+ok arranca la batalla
+ok con el turno del Jugador 1
+ok el LED pasa a batalla
+ok el disparo del Jugador 1 en (0,0) es impacto
+ok y suena el sonido de impacto
+ok y pasa el turno al Jugador 2
+ok el disparo del Jugador 2 en (5,5) es fallo
+ok y suena el sonido de fallo
+ok y vuelve el turno al Jugador 1
+ok el LED sigue en batalla
+ok las 108266 instrucciones ejecutadas salen de la ROM y siguen el flujo del programa
+19 pruebas, 0 fallos
+```
+
+xsim no reportó ninguna violación de setup ni de hold en toda la corrida. A diferencia del
+Proyecto 2, el reinicio no entra de un pin: sale de `~locked` del PLL pasado por dos flip-flops en
+`clk_sys` (sección 5.1), así que ya llega sincronizado.
+
+La traza es el arranque del programa (`INICIO`): tres `lui` cargan las bases de periféricos, video
+y RAM (`s0`, `s1`, `s2`), tres `sw` ponen en cero las ganadas, los displays y el control de la UART,
+un `lui` deja la pila en `0x3000`, y el `jal` en `0x001c` salta a `NUEVA_PARTIDA` en `0x1364`,
+donde `addi sp, sp, -4` y `sw ra, 0(sp)` guardan la dirección de retorno. Los bits `[1:0]` de `prog_in` quedan sin driver en el netlist:
+todas las instrucciones rv32i terminan en `11`, y Vivado deja esos dos bits como constante dentro
+de la ROM (2048 × 31 en el reporte de síntesis). La prueba compara los bits `[31:2]`.
+
+La primera figura muestra la salida del reinicio en la simulación temporizada. `rst` baja a los
+611 ns, cuando el PLL ya enganchó y los dos flip-flops de sincronización pasaron `locked`. Después
+de cada flanco de `clk_sys`, el PC cambia 2,0 ns más tarde, y la instrucción pasa por varios valores
+intermedios mientras cada bit de la ROM se asienta (las marcas estrechas en la fila
+`instrucción`). En los primeros 18 ciclos se estabiliza entre 5,1 y 6,1 ns después del flanco,
+lejos de los 30 ns del período. En una simulación RTL el cambio sería instantáneo.
+
+![Simulación post-implementación: salida del reinicio y primeras instrucciones](img/timesim_arranque.svg)
+
+La segunda figura muestra el disparo del Jugador 1. Mientras `BTN_OK` está en alto, el programa lee
+el botón en la vuelta siguiente del lazo, valida el disparo contra el tablero del Jugador 2 y a los
+7 µs empieza a enviar por `tx` la trama de disparo recibido (`AA 23 00 00 23`: casilla (0,0),
+resultado impacto). Le sigue la trama de estado con el turno del Jugador 2 (`AA 20 02 01 23`).
+Cada byte dura 14,4 µs a 694 444 baudios. El LED se mantiene en `010`, fase de batalla.
+
+![Simulación post-implementación: disparo del Jugador 1 en (0,0)](img/timesim_disparo.svg)
+
+**Modelo de retardo.** xelab usa el modelo inercial, el que tiene por defecto: un pulso más corto que
+el retardo de una celda no se propaga. La primera corrida usó `-transport_int_delays -pulse_r 0`, que
+deja pasar cada glitch. La ROM es un árbol de LUT y `MUXF7`/`MUXF8`, y cuando cambian varios bits del
+PC a la vez sus salidas pasan por valores intermedios. Sin `-pulse_e 0`, esos pulsos se marcaban como
+`X`, que llegaban a la instrucción y de ahí al PC. Con `-pulse_e 0` desaparecen las `X`, pero la
+simulación va tres veces más lenta que con el modelo inercial.
+
+**Cómo reproducirla:**
+
+```sh
+make sim-post                     # implementación con Vivado y simulación con xsim, cerca de una hora
+make sim TB=top_temporizado       # la misma prueba sobre el RTL
+```
+
+El Makefile toma Vivado de `XILINX_VIVADO=/opt/Xilinx/2026.1/Vivado` (se puede cambiar en la línea de
+comandos) y deja el netlist, el SDF, los reportes de timing y de uso, el log de xsim y la onda
+`tb_top_temporizado.vcd` en `src/build/timesim/`. En Ubuntu y derivadas, el compilador que trae
+xsim no encuentra `crti.o` y `xelab` falla con `[XSIM 43-3238] Failed to link the design`. El
+Makefile lo evita pasando `LIBRARY_PATH=/usr/lib/x86_64-linux-gnu`.
 
 ---
 
@@ -1128,11 +1276,20 @@ El testbench VGA confirma períodos y representación bajo sus condiciones de si
 frecuencia vertical teórica es 59,52 Hz y la latencia gráfica es de dos ciclos, ambos valores
 de la arquitectura implementada. En la tarjeta la imagen fue estable en el monitor.
 
-El análisis de timing confirma la decisión de bajar `clk_sys` a 33,33 MHz. Con 44,39 MHz de máximo
-queda una holgura de 7,47 ns, y el camino crítico es el que predice la teoría del uniciclo: del PC
-a través de la ROM, la decodificación y la ALU. Que el ruteo pese el 85 % del camino indica que
-el margen depende más de la colocación que de la profundidad lógica, y explica la variación entre
-corridas.
+El análisis de timing confirma la decisión de bajar `clk_sys` a 33,33 MHz. Con 37,92 MHz de máximo
+queda una holgura de 3,63 ns, y el camino crítico es el que predice la teoría del uniciclo: del PC
+a través de la ROM, el banco de registros y la ALU, de vuelta al PC. Que el ruteo pese el 88 % del
+camino indica que el margen depende más de la colocación que de la profundidad lógica, y explica la
+variación entre versiones.
+
+La implementación de Vivado llega a la misma conclusión por otro camino: 5,03 ns de holgura en
+`clk_sys`, un camino crítico del PC a través de la ROM, la ALU y el banco de registros, y 84 % de
+ruteo. La simulación temporizada agrega lo que el análisis estático no muestra: que con esos
+retardos el programa sigue haciendo lo mismo que en RTL. Las 108 266 instrucciones de la corrida
+salen de la ROM con el valor del `.hex`, el PC sigue el flujo del programa en cada ciclo, y las
+tramas, el LED y el sonido de los dos disparos coinciden con los de la simulación RTL. El WHS de
+0,046 ns es pequeño pero positivo, y la simulación tampoco encontró violaciones de hold. Esta evidencia corresponde a la implementación de Vivado: el bitstream de openXC7 tiene otra
+colocación, y para ese el respaldo sigue siendo el análisis de nextpnr y la prueba en la tarjeta.
 
 La coincidencia de la imagen ROM con el reensamblado elimina una posible discrepancia entre fuente
 y binario. Esa comprobación se repite si cambia `programa.s`, porque el Makefile no regenera el
@@ -1149,7 +1306,7 @@ pulsadores, que se comprobó en la tarjeta.
 
 | # | Problema | Solución | Estado |
 |---|---|---|---|
-| P1 | Camino largo del procesador uniciclo. | Bajar `clk_sys` a 33,33 MHz y recalcular los parámetros de UART, buzzer y display. | Resuelto, 44,39 MHz de máximo. |
+| P1 | Camino largo del procesador uniciclo. | Bajar `clk_sys` a 33,33 MHz y recalcular los parámetros de UART, buzzer y display. | Resuelto, 37,92 MHz de máximo. |
 | P2 | Índices de registros distintos según la dirección externa. | UART usa bits 3:2, los periféricos de un registro reciben `00` y VGA usa 10:2. | Resuelto, ejercitado por `tb_bus_perifericos` y `tb_top`. |
 | P3 | Pulsos cortos de `send` perdidos en el rearme de TX. | Mantener `send` hasta la notificación de fin. | Resuelto, `tb_uart_tx` y `tb_periferico_uart` pasan. |
 | P4 | RX de un solo byte frente a vueltas largas de software. | Pausa de 1 ms entre bytes en la PC. | Resuelto como mitigación, sin FIFO. |
@@ -1162,7 +1319,10 @@ pulsadores, que se comprobó en la tarjeta.
 | P11 | La tarjeta tardaba unos 6 s en cargar el diseño desde la flash después de PROG. | `velocidad_config.py` sube el reloj de configuración (CCLK) de unos 3 a 33 MHz en el bitstream. | Resuelto, carga en unos 0,5 s. |
 | P12 | Los testbenches no compilaban con Icarus 12. | Usar Icarus 13 y fijar la versión en el README. | Resuelto. |
 | P13 | Respuesta de colocación perdida en la PC (sección 7.4). | Conservar la colocación original del id tras el vencimiento. | Caso límite abierto, no ocurrió en las pruebas. |
-| P14 | Simulación post-implementación temporizada. | Netlist ruteado con modelos de primitivas (sección 10.7). | Pendiente. |
+| P14 | openXC7 no exporta un netlist que se pueda simular con retardos. | Implementar con Vivado solo para la simulación temporizada (`make sim-post`, sección 10.7). | Resuelto, 19 pruebas pasan sobre el netlist con SDF. |
+| P15 | En la simulación temporizada con `-transport_int_delays -pulse_r 0`, los glitches de la ROM aparecían como `X` y llegaban al PC. | Usar el modelo de retardo inercial de xelab, que descarta los pulsos más cortos que el retardo de la celda. | Resuelto, además la simulación va tres veces más rápido. |
+| P16 | xsim avanza 0,86 µs simulados por segundo sobre el netlist, y el escenario a 115 200 baudios tomaba más de tres horas. | Parámetro `BAUDIOS` en el `top`, 694 444 solo para el netlist de simulación, y pulsaciones de 150 µs. | Resuelto, la corrida toma 58 minutos. |
+| P17 | `xelab` no enlazaba la simulación: el compilador de Vivado no encuentra `crti.o` en Ubuntu y derivadas. | `LIBRARY_PATH=/usr/lib/x86_64-linux-gnu` en el Makefile. | Resuelto. |
 
 ---
 
@@ -1175,7 +1335,9 @@ pulsadores, que se comprobó en la tarjeta.
 - El programa real ejecuta una partida completa en simulación y en la tarjeta, con resultados
   coherentes entre estado interno y salidas locales y remotas.
 - La memoria gráfica compacta permite tableros, cursor y texto mediante pocas escrituras.
-- El diseño cierra timing con 7,47 ns de holgura y ocupa menos de un cuarto de las LUT de la FPGA.
+- El diseño cierra timing con 3,63 ns de holgura y ocupa menos de un cuarto de las LUT de la FPGA.
+- La simulación post-implementación temporizada ejecuta el programa real hasta validar un disparo de
+  cada jugador, con pase o fallo automático y sin violaciones de setup ni de hold.
 - La procedencia del núcleo y las licencias se conservan, haciendo explícita la reutilización.
 
 ### Limitaciones
@@ -1188,7 +1350,10 @@ pulsadores, que se comprobó en la tarjeta.
   caso de la respuesta perdida (P13) puede desincronizar su vista.
 - La aplicación de PC requiere una terminal POSIX.
 - El barrido puede leer una palabra mientras se modifica, con un artefacto de un cuadro como máximo.
-- Falta la simulación post-implementación temporizada.
+- La simulación temporizada usa la implementación de Vivado y no la de nextpnr-xilinx que se carga
+  en la tarjeta, y la UART a 694 444 baudios. Los retardos simulados son los de un diseño
+  equivalente, no los del bitstream exacto.
+- La simulación temporizada tarda cerca de una hora, así que no cabe en una revisión de cada cambio.
 
 ### Mejoras posibles
 
@@ -1216,19 +1381,20 @@ haría visibles los errores antes de cada merge.
 2. **El procesador uniciclo condiciona la organización de memoria y el reloj.** Las lecturas
    combinacionales permiten resolver las cargas en un ciclo, pero obligan a usar LUTRAM y alargan
    el camino crítico, dominado por el ruteo. La frecuencia de 33,33 MHz responde a ese compromiso
-   y la implementación la confirma con 44,39 MHz de máximo.
+   y la implementación la confirma con 37,92 MHz de máximo.
 3. **Los gráficos por casillas son adecuados para esta aplicación.** Los tableros y mensajes se
    representan con 300 palabras visibles, mientras el periférico genera el barrido por su cuenta.
    La alineación de control y datos en dos ciclos evita desplazamientos en la imagen.
 4. **Una partida nueva y un reinicio general tienen efectos distintos.** El programa conserva
    las ganadas al volver a la colocación y solo las inicializa en el arranque general. El banco del
    top verifica el incremento de J2 y su conservación después de `BTN_RST`.
-5. **Las pruebas automáticas dieron confianza para integrar.** Los 14 testbenches y las 18 pruebas
+5. **Las pruebas automáticas dieron confianza para integrar.** Los 15 testbenches y las 18 pruebas
    de la PC pasan con el flujo del repositorio, y los errores encontrados en la tarjeta (el PLL sin
    salida y la carga lenta desde la flash) fueron de implementación, no de lógica.
 6. **La simulación RTL y la síntesis no sustituyen la evidencia de implementación.** El reporte de
-   timing y las pruebas en la tarjeta complementan las simulaciones, y la simulación temporizada
-   es el siguiente paso para cerrar la validación.
+   timing y las pruebas en la tarjeta complementan las simulaciones. La simulación temporizada
+   cierra la validación: el mismo programa corre sobre el netlist ruteado, con los retardos de cada
+   celda y ruta, y la instrucción se estabiliza a unos 6 ns del flanco, dentro del período de 30 ns.
 
 ---
 
