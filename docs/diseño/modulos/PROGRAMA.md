@@ -813,8 +813,8 @@ El programa se verifica en simulación antes de la placa, con pruebas de autoche
    que salieron y que ninguna escritura en las columnas 11 a 18 de la pantalla tuvo el color
    `C_BARCO`.
 3. **Post-implementación.** El instructivo pide una simulación temporizada que cubra un fragmento
-   del programa y la validación de un disparo. El candidato es la prueba de `PROCESAR_DISPARO` del
-   punto 1.
+   del programa y la validación de un disparo. `make sim-post` la hace con el programa real sobre
+   el diseño ya colocado y ruteado, con los retardos de cada celda y ruta.
 
 **Estado actual.** `src/sim/tb_top.sv` hace el punto 2 con el sistema completo: el top con el
 modelo del PLL, el programa real de la ROM, los botones simulados y la UART del lado de la PC. Juega
@@ -823,6 +823,33 @@ una del Jugador 1 que se traslapa), 18 disparos hasta que el Jugador 2 hunde la 
 Jugador 1, el resultado, y un `BTN_RST` que conserva las ganadas. En cada paso compara las tramas
 que salen por `tx`, la RAM, el LED, los displays, el borde de las casillas y los textos del HUD.
 Son 82 pruebas y tarda cerca de un minuto.
+
+`make sim-post` hace el punto 3. Vivado sintetiza, coloca y rutea `top` para la xc7a35t, cierra
+timing a 33,33 MHz con 5,0 ns de holgura, y exporta el netlist en primitivas con un SDF de los
+retardos (`src/fpga/vivado_timesim.tcl`). xsim corre `src/sim/tb_top_temporizado.sv` sobre ese
+netlist con los retardos del peor caso y los chequeos de setup y hold de cada flip-flop:
+
+- **Fragmento del programa.** En cada flanco de `clk_sys` compara la instrucción que sale de la ROM
+  con `programa.hex` en la dirección del PC, y revisa que el PC siguiente salga de esa instrucción
+  (PC + 4, el destino de un `jal` o una de las dos salidas de un branch). Imprime las primeras 12
+  instrucciones desde el reinicio.
+- **Disparos.** Arranque, colocación de las dos flotas (el Jugador 1 con los botones, el Jugador 2
+  por la UART), un disparo del Jugador 1 que impacta y uno del Jugador 2 que falla. Revisa las
+  tramas, el sonido, el LED y el cambio de turno.
+
+Son 19 pruebas en 3,25 ms simulados, unas 108 000 instrucciones, y tarda cerca de una hora: xsim
+avanza menos de 1 µs de simulación por segundo con los retardos. La misma prueba corre en segundos
+sobre el RTL con `make sim TB=top_temporizado`.
+
+Después de implementar, la jerarquía interna cambia y no se puede leer la RAM ni la memoria de
+video como en `tb_top`. La prueba mira solo los pines y los cables de `top` que conservan su nombre
+(`rst`, `clk_sys`, `prog_address`, `prog_in`, `buzzer_dout`). `prog_in[1:0]` queda sin driver: todas
+las instrucciones rv32i terminan en `11` y Vivado deja esos bits como constante dentro de la ROM.
+
+Dos diferencias con la tarjeta. La implementación es la de Vivado y no la de nextpnr-xilinx, porque
+nextpnr no exporta un netlist que se pueda simular con los modelos de Xilinx. Y la UART va a
+694 444 baudios en vez de 115 200 (parámetro `BAUDIOS` de `top`, solo en este netlist): a 115 200
+cada trama dura 434 µs y la partida tomaría más de tres horas de simulación.
 
 El programa no lee nunca la memoria de video. El estado del juego vive solo en la RAM, así que la
 latencia de lectura del puerto del CPU del VGA no afecta al programa.

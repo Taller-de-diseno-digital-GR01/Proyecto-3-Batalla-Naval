@@ -45,6 +45,18 @@ VELOCIDAD_CONFIG := src/fpga/velocidad_config.py
 APP_DIR    := sw
 PYTHON     := python3
 
+# Vivado solo para la simulación post-implementación temporizada (make sim-post), el bitstream
+# sigue saliendo de openXC7. Se cambia la ruta con make sim-post XILINX_VIVADO=/ruta/Vivado
+XILINX_VIVADO ?= /opt/Xilinx/2026.1/Vivado
+VIVADO_BIN    := $(XILINX_VIVADO)/bin
+TIMESIM_DIR   := $(BUILD_DIR)/timesim
+TIMESIM_TCL   := src/fpga/vivado_timesim.tcl
+TIMESIM_TB    := $(SIM_DIR)/tb_top_temporizado.sv
+TIMESIM_NET   := $(TIMESIM_DIR)/top_timesim.v
+# El gcc que trae xsim para enlazar la simulación no busca en la carpeta de libc del sistema, y en
+# Ubuntu 24.04 (y derivados) falla con "cannot find crti.o"
+XSIM_ENV      := LIBRARY_PATH=/usr/lib/x86_64-linux-gnu$(if $(LIBRARY_PATH),:$(LIBRARY_PATH))
+
 DESIGN_SRCS := $(wildcard $(DESIGN_DIR)/*.sv)
 TB_SRCS     := $(wildcard $(SIM_DIR)/tb_*.sv)
 TBS         := $(patsubst $(SIM_DIR)/tb_%.sv,%,$(TB_SRCS))
@@ -76,7 +88,7 @@ BIT        ?= $(BIT_OUT)
 # el build si src/build/ quedó con binarios de otra máquina
 TOOLCHAIN_STAMP := $(BUILD_DIR)/.toolchain
 
-.PHONY: all help list sim wave dump test test-app synth bitstream program flash connect app clean check-tb check-fpga-toolchain programa FORCE
+.PHONY: all help list sim wave dump test test-app synth bitstream program flash connect app clean check-tb check-fpga-toolchain programa sim-post check-vivado FORCE
 
 # Si una receta falla, borra el archivo que estaba generando. Sin esto un paso que
 # escribe con redirección (ej. fasm2frames > top.frames) deja un archivo vacío que
@@ -95,6 +107,9 @@ help:
 	@echo "make test-app           corre las pruebas de la app de PC con unittest, no necesita la tarjeta"
 	@echo "make programa           ensambla $(PROG_SRC) con $(ENSAMBLAR) y regenera $(PROG_HEX)"
 	@echo "make synth SYNTH_TOP=<modulo>  sintetiza con yosys (genérico) y revisa que no haya latches inferidos"
+	@echo "make sim-post           implementa top con Vivado y corre $(TIMESIM_TB) sobre el netlist ruteado con sus"
+	@echo "                        retardos (SDF) en xsim: arranque del programa, colocación y un disparo de cada jugador."
+	@echo "                        Tarda cerca de una hora. Usa Vivado de XILINX_VIVADO=$(XILINX_VIVADO), deja todo en $(TIMESIM_DIR)"
 	@echo "make bitstream          genera $(BIT_OUT) con yosys + nextpnr-xilinx + prjxray (openXC7, sin Vivado)"
 	@echo "                        toma el toolchain de OPENXC7=$(OPENXC7) y PRJXRAY_PY=$(PRJXRAY_PY), no hace falta"
 	@echo "                        correr 'source .../export.sh' antes"
@@ -245,6 +260,50 @@ $(BIT_OUT): $(FRAMES_OUT) $(VELOCIDAD_CONFIG)
 
 bitstream: check-fpga-toolchain $(BIT_OUT)
 	@echo "Bitstream generado en $(BIT_OUT)"
+
+# Simulación post-implementación temporizada. Vivado sintetiza, coloca y rutea top igual que para
+# una tarjeta, y exporta el netlist en primitivas SIMPRIM con un SDF de los retardos de celdas y
+# rutas (vivado_timesim.tcl). xsim corre tb_top_temporizado sobre ese netlist con -maxdelay, los
+# retardos del peor caso, y con los chequeos de setup y hold de cada flip-flop. La misma prueba
+# corre con make sim TB=top_temporizado sobre el RTL.
+#
+# Diferencias con la tarjeta: la implementación es la de Vivado y no la de nextpnr-xilinx (nextpnr
+# no exporta un netlist que se pueda simular con los modelos de Xilinx), y la UART va a 694444
+# baudios para que la partida quepa en una corrida, ver vivado_timesim.tcl.
+#
+# Los retardos van con el modelo inercial, el de xelab por defecto: un pulso más corto que el
+# retardo de la celda no pasa. Con -transport_int_delays y -pulse_r 0 pasa cada glitch de la ROM,
+# que es un árbol de LUTs, y la simulación va 3 veces más lenta. Aun así toma cerca de una hora.
+check-vivado:
+	@[ -x $(VIVADO_BIN)/vivado ] || \
+		{ echo "ERROR: no está Vivado en $(VIVADO_BIN). Pasar la ruta con make sim-post XILINX_VIVADO=/ruta/Vivado"; exit 1; }
+
+# Vivado escribe en el log si leyó el .hex de la ROM, pero si no lo encuentra solo avisa y la ROM
+# queda en cero, así que eso se revisa aquí
+$(TIMESIM_NET): $(DESIGN_SRCS) $(PROG_HEX) $(XDC) $(TIMESIM_TCL) | $(BUILD_DIR)
+	@mkdir -p $(TIMESIM_DIR)
+	$(VIVADO_BIN)/vivado -mode batch -nojournal -log $(TIMESIM_DIR)/vivado.log \
+		-source $(TIMESIM_TCL) -tclargs $(TIMESIM_DIR) > /dev/null || \
+		{ grep -E "^(ERROR|CRITICAL)" $(TIMESIM_DIR)/vivado.log; exit 1; }
+	@grep -q "readmem data file '$(PROG_HEX)' is read successfully" $(TIMESIM_DIR)/vivado.log || \
+		{ echo "ERROR: Vivado no leyó $(PROG_HEX) para la ROM, ver $(TIMESIM_DIR)/vivado.log"; rm -f $@; exit 1; }
+	@grep "^WNS de setup" $(TIMESIM_DIR)/vivado.log
+
+# xvlog y xelab corren dentro de $(TIMESIM_DIR) porque el $$sdf_annotate del netlist busca
+# top_timesim.sdf en la carpeta actual. xsim no devuelve error cuando la prueba llama $$fatal, por
+# eso el resultado sale del log que escribe xsim
+sim-post: check-vivado $(TIMESIM_NET)
+	cd $(TIMESIM_DIR) && \
+		$(VIVADO_BIN)/xvlog $(XILINX_VIVADO)/data/verilog/src/glbl.v top_timesim.v > xvlog.log && \
+		$(VIVADO_BIN)/xvlog -sv -d POST_IMPL $(CURDIR)/$(TIMESIM_TB) >> xvlog.log && \
+		$(XSIM_ENV) $(VIVADO_BIN)/xelab -L simprims_ver -L secureip -maxdelay -mt auto \
+			-s tb_top_temporizado work.tb_top_temporizado work.glbl > xelab.log || \
+		{ grep -E "ERROR|cannot find" $(TIMESIM_DIR)/xvlog.log $(TIMESIM_DIR)/xelab.log; exit 1; }
+	cd $(TIMESIM_DIR) && $(XSIM_ENV) $(VIVADO_BIN)/xsim tb_top_temporizado -R -log xsim.log | \
+		grep -E "^(ok|fallo|  )|pruebas,|Fatal|FATAL" || true
+	@grep -q "pruebas, 0 fallos" $(TIMESIM_DIR)/xsim.log || \
+		{ echo "ERROR: la simulación temporizada falló, ver $(TIMESIM_DIR)/xsim.log"; exit 1; }
+	@echo "Onda del arranque y del disparo del Jugador 1 en $(TIMESIM_DIR)/tb_top_temporizado.vcd"
 
 # Diagnóstico de conectividad antes de programar: revisa que openFPGALoader esté
 # en PATH, que la Basys3 aparezca en el bus USB, y que se pueda hablar JTAG con

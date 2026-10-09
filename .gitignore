@@ -13,6 +13,8 @@ src/build/
 *.log
 *.tcl
 clockInfo.txt
+# Menos el script de make sim-post, ese es fuente
+!src/fpga/vivado_timesim.tcl
 
 __pycache__/
 *.pyc
