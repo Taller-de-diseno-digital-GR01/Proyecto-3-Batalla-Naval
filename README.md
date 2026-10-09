@@ -63,6 +63,9 @@ El enunciado completo del proyecto está en [`EL3313_proyecto3_2S2026.pdf`](EL33
 
 ## Diseño modular
 
+Todo el diseño (los tres niveles de diagramas y la ficha de cada módulo) también está junto en un
+solo archivo, [`docs/diseño/diseño.md`](docs/diseño/diseño.md), que es el planteamiento del diseño.
+
 ### Investigación previa
 
 - [Investigación previa](docs/diseño/investigacion-previa.md)
@@ -82,6 +85,11 @@ El enunciado completo del proyecto está en [`EL3313_proyecto3_2S2026.pdf`](EL33
   organización de los datos en RAM y el protocolo UART entre la FPGA y la PC.
 
 ### Nivel 4: Diseño detallado por módulo
+
+Sistema completo y relojes:
+
+- [Top, el sistema completo y sus pines](docs/diseño/modulos/TOP.md)
+- [Generador de relojes, el PLL](docs/diseño/modulos/generador_relojes.md)
 
 Procesador y memorias:
 
@@ -140,6 +148,7 @@ El programa en ensamblador, que no es hardware pero es donde viven las reglas de
 - [GTKWave](https://gtkwave.sourceforge.net/), opcional, solo para inspeccionar formas de onda
   (`make wave`).
 - [yosys](https://github.com/YosysHQ/yosys), para la síntesis.
+- [Verilator](https://www.veripool.org/verilator/), solo como linter (`make lint`).
 - Toolchain abierto [openXC7](https://github.com/openXC7) (`nextpnr-xilinx`, `prjxray`,
   `fasm2frames.py`, `xc7frames2bit`) y
   [`openFPGALoader`](https://github.com/trabucayre/openFPGALoader), para generar el bitstream y
@@ -187,7 +196,9 @@ make list                       # lista los testbenches disponibles
 make sim TB=<modulo>            # compila y corre un testbench puntual
 make test                       # corre todos los testbenches, uno por uno
 make wave TB=<modulo>           # corre la simulación y abre GTKWave
-make synth SYNTH_TOP=<modulo>   # sintetiza con yosys y revisa que no haya latches inferidos
+make synth                      # sintetiza el top con yosys y revisa que no haya latches inferidos
+make synth SYNTH_TOP=<modulo>   # lo mismo con un módulo suelto
+make lint                       # verilator --lint-only -Wall sobre el top, falla con latches o drivers múltiples
 make test-app                   # pruebas de la app de PC (unittest), no necesita la tarjeta
 make programa                   # vuelve a ensamblar sw/programa.s y regenera sw/programa.hex
 make sim-post                   # simulación post-implementación temporizada con Vivado, ~1 hora

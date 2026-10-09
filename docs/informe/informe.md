@@ -321,8 +321,10 @@ reproduce el código de sonido escrito por el programa.
 Los multiplexores y decodificadores deben definir una salida en todos los caminos de ejecución.
 Los valores por defecto y las ramas `default` evitan retener accidentalmente el resultado
 anterior. La revisión del RTL se complementa con el resultado de `proc` de yosys, que informa cada
-señal combinacional en la que no infiere un latch, y con la estadística de celdas del netlist. Una
-RAM o un registro explícito es almacenamiento intencional, no un latch accidental.
+señal combinacional en la que no infiere un latch, con la estadística de celdas del netlist y con
+un linter (Verilator), que avisa de latches, de asignaciones con retardo dentro de lógica
+combinacional y de señales con más de un driver. Una RAM o un registro explícito es almacenamiento
+intencional, no un latch accidental.
 
 ---
 
@@ -923,6 +925,7 @@ criterio automático de pase.
 | PC | `unittest` de codificación y estado | 18 pruebas sin fallos |
 | Integración | `tb_top` con ROM real | Tramas, tableros, HUD, LED, display y resultado coherentes durante la partida |
 | Síntesis | `make synth` con yosys | Ningún `Latch inferred` en el log ni latch en el netlist |
+| Linter | `make lint`, `verilator --lint-only -Wall` sobre el top | Ningún aviso de latch, de asignación con retardo en lógica combinacional ni de driver múltiple |
 | Implementación | nextpnr-xilinx | Frecuencia máxima de cada reloj por encima de la de operación |
 | Post-implementación | `tb_top_temporizado` sobre el netlist de Vivado con SDF, en xsim | Programa, colocación y disparos correctos, sin violaciones de setup ni de hold |
 | Tarjeta | Partidas completas en la Basys 3 | Controles, enlace, imagen, sonidos, displays y LED correctos |
@@ -936,13 +939,14 @@ make sim TB=top  # solo el sistema completo
 make sim-post    # simulación post-implementación temporizada con Vivado, cerca de una hora
 make programa    # vuelve a ensamblar sw/programa.s
 make synth       # síntesis genérica del top y chequeo de latches
+make lint        # linter Verilator sobre el top
 make bitstream   # síntesis, colocación y ruteo con openXC7
 make flash       # graba el bitstream en la flash de la Basys 3
 ```
 
 Herramientas: Icarus Verilog 13.0, yosys 0.69 y nextpnr-xilinx del toolchain openXC7,
-openFPGALoader, binutils de GNU para RISC-V y Python 3 con `pyserial`. La simulación
-post-implementación usa Vivado 2026.1 y xsim. Los testbenches usan
+openFPGALoader, binutils de GNU para RISC-V, Python 3 con `pyserial` y Verilator 5.020 como
+linter. La simulación post-implementación usa Vivado 2026.1 y xsim. Los testbenches usan
 `return` dentro de tasks y literales de arreglo `'{...}`, que Icarus 12 no acepta, por eso el
 README fija la versión 13.
 
@@ -1049,6 +1053,21 @@ OK
 `Latch inferred`, y `proc` reporta 570 señales combinacionales revisadas sin latch. El netlist tiene
 10 memorias (`$mem_v2`), un `PLLE2_BASE` y dos `BUFG`, y ninguna celda de latch.
 
+**Linter (`make lint`).** `verilator --lint-only -Wall` sobre el top no da ningún aviso de latch
+(`LATCH`), de asignación con retardo en lógica combinacional (`COMBDLY`) ni de señal con más de un
+driver (`MULTIDRIVEN`). Los 23 avisos que da son de estilo, revisados uno por uno:
+
+| Aviso | Cantidad | Qué es |
+|---|---:|---|
+| `WIDTHEXPAND` | 8 | En `periferico_vga.sv` los contadores de 10 bits se comparan con constantes enteras de 32. Verilator extiende con ceros, que es lo correcto |
+| `UNUSEDSIGNAL` | 11 | Bits de `wdata_i` y `addr_i` que un periférico o una memoria no usa (el periférico de entradas no usa `write_enable_i` ni `wdata_i`, porque es de solo lectura), y señales del núcleo reutilizado que la plataforma no conecta: las habilitaciones por byte y de lectura, el reloj de `data_memory_interface` y bits de `funct7` que el control no necesita |
+| `UNUSEDPARAM` | 2 | Constantes de documentación (`COLUMNAS` del VGA y `SILENCIO` del secuenciador) |
+| `DECLFILENAME` | 1 | `generador_tono.sv` incluye el módulo auxiliar `contador_limpiable` |
+| `PINCONNECTEMPTY` | 1 | `prueba_vga.sv`, el top de prueba del VGA, deja `rdata_o` sin conectar |
+
+Verilator no conoce `PLLE2_BASE` ni `BUFG`, así que revisa `generador_relojes` con su modelo de
+simulación, que es la parte del diseño que no llega a la FPGA.
+
 **Implementación (`make bitstream`, nextpnr-xilinx).** Utilización del XC7A35T después de colocar
 y rutear:
 
@@ -1114,10 +1133,12 @@ demostración está en el
 El instructivo pide una simulación post-implementación temporizada del sistema que cubra al menos
 la ejecución de un fragmento representativo del programa y la validación de un disparo. Los bancos
 de la sección 10.1 son RTL y usan el modelo conductual del PLL, sin retardos de celdas ni de ruteo.
-openXC7 no exporta un netlist que se pueda simular con los modelos de primitivas de Xilinx, así que
-para esta simulación se usó Vivado 2026.1: implementación, netlist temporizado
-(`write_verilog -mode timesim` y `write_sdf`) y simulación con xsim. Todo el flujo corre con
-`make sim-post` (script `src/fpga/vivado_timesim.tcl`).
+Con el flujo abierto openXC7 no se puede hacer en la forma estricta: nextpnr-xilinx sí escribe un
+SDF con los retardos del diseño ruteado (`--sdf`), pero ese archivo describe sus celdas internas
+(`SLICE_LUTX`, `SLICE_FFX`, `SELMUX2_1`), que no tienen modelo de simulación, y no hay un netlist
+simulable sobre el cual anotarlo. Por eso para esta simulación se usó Vivado 2026.1:
+implementación, netlist temporizado (`write_verilog -mode timesim` y `write_sdf`) y simulación con
+xsim. Todo el flujo corre con `make sim-post` (script `src/fpga/vivado_timesim.tcl`).
 
 **Implementación.** `synth_design`, `opt_design`, `place_design` y `route_design` para el
 xc7a35tcpg236-1 con `src/fpga/basys3.xdc` y la ROM cargada con el `programa.hex` real:
@@ -1220,9 +1241,10 @@ Proyecto 2, el reinicio no entra de un pin: sale de `~locked` del PLL pasado por
 La traza es el arranque del programa (`INICIO`): tres `lui` cargan las bases de periféricos, video
 y RAM (`s0`, `s1`, `s2`), tres `sw` ponen en cero las ganadas, los displays y el control de la UART,
 un `lui` deja la pila en `0x3000`, y el `jal` en `0x001c` salta a `NUEVA_PARTIDA` en `0x1364`,
-donde `addi sp, sp, -4` y `sw ra, 0(sp)` guardan la dirección de retorno. Los bits `[1:0]` de `prog_in` quedan sin driver en el netlist:
-todas las instrucciones rv32i terminan en `11`, y Vivado deja esos dos bits como constante dentro
-de la ROM (2048 × 31 en el reporte de síntesis). La prueba compara los bits `[31:2]`.
+donde `addi sp, sp, -4` y `sw ra, 0(sp)` guardan la dirección de retorno. Los bits `[1:0]` de
+`prog_in` quedan sin driver en el netlist: todas las instrucciones rv32i terminan en `11`, y Vivado
+deja esos dos bits como constante dentro de la ROM (2048 × 31 en el reporte de síntesis). La prueba
+compara los bits `[31:2]`.
 
 La primera figura muestra la salida del reinicio en la simulación temporizada. `rst` baja a los
 611 ns, cuando el PLL ya enganchó y los dos flip-flops de sincronización pasaron `locked`. Después
@@ -1323,7 +1345,7 @@ pulsadores, que se comprobó en la tarjeta.
 | P11 | La tarjeta tardaba unos 6 s en cargar el diseño desde la flash después de PROG. | `velocidad_config.py` sube el reloj de configuración (CCLK) de unos 3 a 33 MHz en el bitstream. | Resuelto, carga en unos 0,5 s. |
 | P12 | Los testbenches no compilaban con Icarus 12. | Usar Icarus 13 y fijar la versión en el README. | Resuelto. |
 | P13 | Respuesta de colocación perdida en la PC (sección 7.4). | Conservar la colocación original del id tras el vencimiento. | Caso límite abierto, no ocurrió en las pruebas. |
-| P14 | openXC7 no exporta un netlist que se pueda simular con retardos. | Implementar con Vivado solo para la simulación temporizada (`make sim-post`, sección 10.7). | Resuelto, 19 pruebas pasan sobre el netlist con SDF. |
+| P14 | openXC7 no exporta un netlist que se pueda simular con retardos: el SDF de nextpnr-xilinx describe celdas internas sin modelo de simulación. | Implementar con Vivado solo para la simulación temporizada (`make sim-post`, sección 10.7). | Resuelto, 19 pruebas pasan sobre el netlist con SDF. |
 | P15 | En la simulación temporizada con `-transport_int_delays -pulse_r 0`, los glitches de la ROM aparecían como `X` y llegaban al PC. | Usar el modelo de retardo inercial de xelab, que descarta los pulsos más cortos que el retardo de la celda. | Resuelto, además la simulación va tres veces más rápido. |
 | P16 | xsim avanza 0,86 µs simulados por segundo sobre el netlist, y el escenario a 115 200 baudios tomaba más de tres horas. | Parámetro `BAUDIOS` en el `top`, 694 444 solo para el netlist de simulación, y pulsaciones de 150 µs. | Resuelto, la corrida toma 58 minutos. |
 | P17 | `xelab` no enlazaba la simulación: el compilador de Vivado no encuentra `crti.o` en Ubuntu y derivadas. | `LIBRARY_PATH=/usr/lib/x86_64-linux-gnu` en el Makefile. | Resuelto. |
@@ -1356,7 +1378,8 @@ pulsadores, que se comprobó en la tarjeta.
 - El barrido puede leer una palabra mientras se modifica, con un artefacto de un cuadro como máximo.
 - La simulación temporizada usa la implementación de Vivado y no la de nextpnr-xilinx que se carga
   en la tarjeta, y la UART a 694 444 baudios. Los retardos simulados son los de un diseño
-  equivalente, no los del bitstream exacto.
+  equivalente, no los del bitstream exacto. Para el bitstream de openXC7 queda el timing estático
+  de nextpnr-xilinx (sección 10.5).
 - La simulación temporizada tarda cerca de una hora, así que no cabe en una revisión de cada cambio.
 
 ### Mejoras posibles
