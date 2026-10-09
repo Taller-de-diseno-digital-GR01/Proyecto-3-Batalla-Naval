@@ -1127,6 +1127,19 @@ demostración está en el
 - El buzzer toca los cinco sonidos distintos.
 - PROG recarga el diseño desde la flash en unos 0,5 s y deja las ganadas en 00 00.
 
+La primera foto es de la fase de colocación. En el monitor, las dos barras dicen COLOCANDO y la
+vista previa amarilla del barco 0 del Jugador 1, de largo 4, está en la fila 1 de la A a la D. El
+Jugador 2 coloca desde la laptop de la derecha, y su tablero se ve todo en agua porque el VGA nunca
+muestra la flota de J2. Abajo están el mensaje de la fase y las partidas ganadas, en 00 y 00.
+
+![Fase de colocación en el monitor VGA, con la aplicación de PC del Jugador 2 en la laptop](img/tarjeta_colocacion.jpg)
+
+La segunda es la Basys 3 después de una partida ganada por el Jugador 2. Los displays muestran
+00 01, con las ganadas del Jugador 1 en los dos dígitos de la izquierda y las del Jugador 2 en los
+de la derecha, y el LED DONE, junto al botón PROG, indica que la FPGA está configurada.
+
+![Basys 3 con las ganadas 00 01 en los displays de 7 segmentos](img/tarjeta_displays.jpg)
+
 ### 10.7 Simulación post-implementación temporizada
 
 El instructivo pide una simulación post-implementación temporizada del sistema que cubra al menos
