@@ -121,9 +121,11 @@ Se genera con `TICKS_X16 = 4`, dato de 2 bits e `indice_bit` de 1 bit. Con los v
 ancho de los contadores y la cantidad de copias por bit de dato, no la estructura.
 
 `cuenta_tick`, `cuenta_bit` e `indice_bit` se dibujan de 2, 4 y 1 bits. En el `.sv` están declarados
-como `int`, y yosys los sintetiza como contadores de 32 bits aunque no pasen de 53, 15 y 7. Con esos
-tres en 32 bits la máquina de estados sola da más de 800 compuertas. TODO: Revisar si se cambian a
-`logic` con el ancho justo.
+como `int`, y yosys los sintetiza como contadores de 32 bits aunque no pasen de 17 (con `clk_i` de
+33,33 MHz), 15 y 7. Con esos tres en 32 bits la máquina de estados sola da más de 800 compuertas. Se
+dejan como `int` porque así vienen del núcleo del curso, y el sistema completo usa cerca del 23 % de
+las LUT de la XC7A35T y cierra *timing* con holgura. Declararlos como `logic` con el ancho justo
+ahorraría compuertas sin cambiar el comportamiento.
 
 ## j) Diagrama completo de conexiones del diseño
 

@@ -1,4 +1,4 @@
-
+# Nivel 3
 
 ## Diagrama de tercer nivel
 
@@ -8,9 +8,9 @@ flowchart TD
     ROM["ROM de programa"]
     RAM["RAM de datos"]
 
-    subgraph MAP["CONTROLADOR_MAPEO - propuesta"]
-        DIR["Decodificación de rangos"]
-        CMP_UART["Comparador UART<br/>0x0001_0040-0x0001_004F"]
+    subgraph MAP["CONTROLADOR_MAPEO: address_translator y mux_lectura"]
+        DIR["Decodificación de direcciones"]
+        CMP_UART["Comparador UART<br/>0x0001_0040, 0x0001_0044, 0x0001_0048"]
         AND_WE["Habilitación de escritura UART<br/>we_o y sel_uart"]
         CMP_VGA["Comparador VGA<br/>0x0001_1000-0x0001_17FF"]
         AND_WE_VGA["Habilitación de escritura VGA<br/>we_o y sel_vga"]
@@ -19,14 +19,14 @@ flowchart TD
         CMP_UART -->|"sel_uart"| AND_WE
         DIR --> CMP_VGA
         CMP_VGA -->|"sel_vga"| AND_WE_VGA
-        DIR -->|"selección del destino"| RMUX
+        DIR -->|"mux_sel[2:0]"| RMUX
     end
 
-    subgraph GPIO["ENTRADAS - propuesta"]
-        SYNC["Sincronización"] --> DB["Filtro de rebotes"] --> BTNREG["Registro de botones"]
+    subgraph GPIO["PERIFERICO_ENTRADAS"]
+        BTNREG["REG_ESTADO<br/>7 bits, un flip-flop por pin"]
     end
 
-    subgraph PUART["PERIFERICO_UART - feature/uart"]
+    subgraph PUART["PERIFERICO_UART"]
         DEC_UART["Selección de registro<br/>addr_i"]
         REG_CTRL["reg_control<br/>send, new_rx"]
         REG_TX["reg_tx"]
@@ -50,12 +50,16 @@ flowchart TD
     VGA["PERIFERICO_VGA<br/>detalle en la sección VGA"]
     MON["Monitor VGA"]
 
-    subgraph DISP["DISPLAY Y LED - propuesta"]
-        DREG["Registro de datos"] --> SCAN["Selector y decodificador"]
+    subgraph DISP["PERIFERICO_7SEG"]
+        DREG["Registro de dígitos BCD y puntos"] --> SCAN["marcador<br/>barrido y decodificador"]
     end
 
-    subgraph BUZ["BUZZER - propuesta"]
-        BREG["Registro de evento"] --> TONE["Generador de tono"]
+    subgraph PLED["PERIFERICO_LED"]
+        LREG["Registro de LED<br/>3 bits"]
+    end
+
+    subgraph BUZ["PERIFERICO_BUZZER"]
+        BREG["Registro de sonido"] --> SEQ["secuenciador_melodia"] --> TONE["generador_tono"]
     end
 
     CPU -->|"ProgAddress_o"| ROM
@@ -76,19 +80,23 @@ flowchart TD
     VGA -->|"rdata_o"| RMUX
     VGA -->|"vga_hsync_o, vga_vsync_o<br/>vga_r_o, vga_g_o, vga_b_o"| MON
     DIR --> DREG
+    DREG --> RMUX
+    DIR --> LREG
+    LREG --> RMUX
     DIR --> BREG
+    BREG --> RMUX
     APP["Aplicación de PC"] -->|"rx_i"| RX
     TX -->|"tx_o"| APP
 ```
 
-El procesador aparece como **un solo bloque**, sin mostrar sus partes internas. ROM y RAM son bloques separados: ROM entrega instrucciones directamente al procesador y RAM comparte el camino de datos con los periféricos. Dentro de `CONTROLADOR_MAPEO` se muestran la decodificación, el comparador de UART, la habilitación de escritura y el multiplexor de lectura; son **conexiones propuestas**, aún sin RTL de integración. Los registros y núcleos UART sí corresponden al código de `feature/uart`. `clk_i` y `rst_i` llegan al periférico UART, aunque no se repitan en cada registro del dibujo.
+El procesador aparece como **un solo bloque**, sin mostrar sus partes internas. ROM y RAM son bloques separados: ROM entrega instrucciones directamente al procesador y RAM comparte el camino de datos con los periféricos. Dentro de `CONTROLADOR_MAPEO` se muestran la decodificación, el comparador de UART y el de VGA como ejemplos de la habilitación de escritura, y el multiplexor de lectura. Es el RTL de `address_translator.sv` y `mux_lectura.sv`, instanciado en `top.sv`. Los demás destinos tienen comparadores y habilitaciones equivalentes que no se dibujan. `clk_i` y `rst_i` llegan a todos los periféricos, aunque no se repitan en cada registro del dibujo.
 
 ## Observaciones de integración
 
-- **Entradas.** Se propone sincronizar y filtrar los botones antes de exponer su estado en un registro. El programa decide cómo usar cada pulsación.
-- **Display y LED.** Se proponen registros mapeados para el contador de victorias y la fase del juego, más un selector de dígito y un decodificador de segmentos. La distribución concreta de bits sigue pendiente.
-- **Buzzer.** Se propone un registro para seleccionar el evento y un generador de tono. El programa determina qué evento ocurrió.
-- **Aplicación de PC.** Envía y recibe bytes por UART; la interpretación de colocaciones, turnos y disparos corresponde al programa ejecutado por el procesador. El periférico UART solo transporta bytes.
+- **Entradas.** `PERIFERICO_ENTRADAS` registra los siete pines en un flip-flop cada uno y los expone en un registro de estado. No lleva antirrebote ni sincronizador de dos etapas, con la autorización del profesor (los botones de la Basys 3 ya llegan filtrados). El programa saca los flancos y decide cómo usar cada pulsación.
+- **Display y LED.** `PERIFERICO_7SEG` guarda cuatro dígitos BCD y sus puntos, y el `marcador` los barre en los cuatro displays. `PERIFERICO_LED` guarda tres bits, un LED por fase. El programa escribe las partidas ganadas y la fase.
+- **Buzzer.** `PERIFERICO_BUZZER` recibe un código de sonido. El `secuenciador_melodia` toca sus notas y el `generador_tono` arma la onda cuadrada. El programa determina qué evento ocurrió.
+- **Aplicación de PC.** Envía y recibe bytes por UART. La interpretación de colocaciones, turnos y disparos corresponde al programa ejecutado por el procesador. El periférico UART solo transporta bytes.
 
 ## Controlador de mapeo
 
@@ -96,13 +104,13 @@ Este bloque se sitúa entre el bus de datos del procesador y la RAM o los perif�
 
 El decodificador compara la dirección completa con el mapa de memoria y genera una selección para un único destino. La RAM ocupa `0x0000_2000`–`0x0000_2FFF`; UART, `0x0001_0040`–`0x0001_004F`; y VGA, `0x0001_1000`–`0x0001_17FF`. Los registros de botones, display, LED y buzzer se seleccionan en sus direcciones respectivas. En particular, display (`0x0001_0130`) y LED (`0x0001_0138`) **no** pueden distinguirse comparando solo `DataAddress_o[31:4]`, porque comparten esos bits altos.
 
-En una escritura, `DataOut_o` llega al destino, pero su habilitación se activa únicamente cuando coinciden `we_o` y la señal de selección correspondiente. Para UART se propone `write_enable_i = we_o && sel_uart`, donde `sel_uart` resulta de comparar `DataAddress_o[31:4]` con `0x0001004`; `DataAddress_o[3:2]` escoge internamente los registros de control, TX o RX mediante `addr_i[1:0]`. El controlador debe generar habilitaciones equivalentes e independientes para RAM y los demás destinos, evitando que un `sw` a uno modifique otro.
+En una escritura, `DataOut_o` llega al destino, pero su habilitación se activa únicamente cuando coinciden `we_o` y la señal de selección correspondiente. Para UART es `write_enable_i = we_o && sel_uart`, donde `sel_uart` sale de comparar la dirección completa con `0x0001_0040`, `0x0001_0044` y `0x0001_0048`. En `top.sv`, `DataAddress_o[3:2]` llega como `addr_i[1:0]` y escoge los registros de control, TX o RX. `0x0001_004C` no es ninguna de las tres, así que no selecciona la UART. El controlador genera habilitaciones equivalentes e independientes para RAM y los demás destinos, así un `sw` a uno no modifica otro.
 
-En una lectura, `MUX_LECTURA` selecciona el dato de RAM o la salida `rdata_o` del periférico indicado y lo entrega a `DataIn_i`. Para direcciones sin destino se propone devolver cero y no habilitar ninguna escritura; también deben definirse los accesos no alineados. Como el procesador es uniciclo, el camino de lectura y su latencia se tendrán que comprobar al integrar la RAM y los periféricos. Estas conexiones del controlador son todavía una propuesta, no RTL ya implementado.
+En una lectura, `MUX_LECTURA` selecciona el dato de RAM o la salida `rdata_o` del periférico indicado y lo entrega a `DataIn_i`. Una dirección sin destino, o no alineada a palabra, no habilita ninguna escritura y se lee como cero. Como el procesador es uniciclo, el camino de lectura es combinacional de punta a punta, y la implementación del sistema completo cierra *timing* a 33,33 MHz con ese camino incluido.
 
 ## PERIFERICO_UART
 
-El bloque sigue [`src/design/periferico_uart.sv`](https://github.com/Taller-de-diseno-digital-GR01/Proyecto-3-Batalla-Naval/blob/feature/uart/src/design/periferico_uart.sv) y sus dos submódulos [`uart_tx.sv`](https://github.com/Taller-de-diseno-digital-GR01/Proyecto-3-Batalla-Naval/blob/feature/uart/src/design/uart_tx.sv) y [`uart_rx.sv`](https://github.com/Taller-de-diseno-digital-GR01/Proyecto-3-Batalla-Naval/blob/feature/uart/src/design/uart_rx.sv).
+El bloque es `src/design/periferico_uart.sv` con sus dos submódulos, `uart_tx.sv` y `uart_rx.sv`. La ficha completa está en [`PERIFERICO_UART.md`](../modulos/PERIFERICO_UART.md).
 
 - **Interfaz del bus:** `clk_i`, `rst_i`, `write_enable_i`, `addr_i[1:0]`, `wdata_i[31:0]` y `rdata_o[31:0]`. Los pines seriales son `rx_i` y `tx_o`.
 - **Selección interna:** `addr_i=00` selecciona `reg_control` en `0x0001_0040`; `01` selecciona `reg_tx` en `0x0001_0044`; `10` selecciona `reg_rx` en `0x0001_0048`. La combinación `11` no está asignada, devuelve cero al leer y no escribe ningún registro.
@@ -110,7 +118,7 @@ El bloque sigue [`src/design/periferico_uart.sv`](https://github.com/Taller-de-d
 - **Recepción:** `uart_rx` reconstruye el byte entrante con sobremuestreo, lo entrega como `o_dato` y pulsa `o_dato_listo`. Entonces se carga `reg_rx` y sube `reg_control[1]` (`new_rx`). Tras leer el byte, el programa limpia esa bandera escribiendo cero en el bit 1 del registro de control. Con `clk_i` de 33,33 MHz, el núcleo RX recibe `TICKS_X16=18`.
 - **Lectura:** `rdata_o` selecciona combinacionalmente control, TX o RX y extiende a 32 bits los bytes de datos. Un nuevo byte recibido tiene prioridad frente a una escritura del CPU a `reg_rx` o al bit `new_rx` en el mismo ciclo.
 
-Los archivos `arbitro_uart.sv`, `receptor_uart.sv` y `transmisor_uart.sv` también aparecen en la rama, pero proceden del Proyecto 2: el diseño documentado para Proyecto 3 tiene **un único maestro del periférico, el procesador**, y no coloca ese árbitro entre CPU y UART. El periférico todavía no aparece instanciado en un `top.sv` del sistema completo.
+El periférico tiene **un único maestro, el procesador**, así que no lleva el árbitro que tenía la UART del Proyecto 2. Está instanciado en `top.sv` como `u_periferico_uart`.
 
 ## VGA
 Este bloque corresponde al módulo que conecta al procesador (CPU) con el monitor mediante el estándar de video VGA. La ficha completa, con los puntos a) a j), está en [`modulos/PERIFERICO_VGA.md`](../modulos/PERIFERICO_VGA.md).
@@ -125,7 +133,7 @@ Este bloque corresponde al módulo que conecta al procesador (CPU) con el monito
 - **Selección:** el controlador compara `DataAddress_o[31:11]` con `0x00022` para obtener `sel_vga`, que cubre `0x0001_1000`–`0x0001_17FF`. La escritura se habilita con `write_enable_i = we_o && sel_vga`, y `DataAddress_o[10:2]` llega como `addr_i`.
 - **Memoria de video:** RAM distribuida de doble puerto de 512 × 32 bits, una palabra por casilla de una cuadrícula de 20 × 15 casillas de 32 × 32 píxeles. El puerto A atiende al CPU igual que la RAM de datos del núcleo: escribe en el flanco de `clk_i` y lee de forma combinacional, así un `lw` recibe el dato en el mismo ciclo. El puerto B lo lee el barrido de forma continua y registra el color con `clk_pix_i`.
 - **Barrido:** dos contadores (módulo 800 y módulo 525) y sus comparadores generan `hsync`, `vsync` y `video_on` para 640 × 480 a 60 Hz. El índice de la casilla es `fila × 20 + col`, con `col = h_count[9:5]` y `fila = v_count[8:5]`.
-- **Salida:** los bits `[2:0]` de la palabra son el color de fondo de la casilla y pasan por una paleta a RGB444. El bit `[3]` dibuja una línea negra en el contorno de la casilla (el grid de los tableros) y los bits `[9:4]` un carácter encima, en ASCII − 32, con la fuente de 5 × 7 de `FUENTE_CARACTERES`. El píxel se fuerza a negro fuera del área visible y se registra junto con los sincronismos, que se retrasan lo mismo que la lectura del puerto B.
+- **Salida:** los bits `[2:0]` de la palabra son el color de fondo de la casilla y pasan por una paleta a RGB444. El bit `[3]` dibuja una línea negra en el contorno de la casilla (el grid de los tableros). Los bits `[9:4]` y `[15:10]` son dos caracteres encima, uno en cada mitad de la casilla, en ASCII − 32 y con la fuente de 5 × 7 de `FUENTE_CARACTERES`. El bit `[16]` dibuja solo el primero, centrado. El píxel se fuerza a negro fuera del área visible y se registra junto con los sincronismos, que se retrasan lo mismo que la lectura del puerto B.
 
 ## Programa en ensamblador
 
@@ -137,7 +145,7 @@ El procesador es el núcleo de ciclo único de [riscv-simple-sv](https://github.
 
 Para el programa eso significa:
 
-- **Las direcciones se arman con `lui`.** Cada dirección base sale de una sola instrucción (tabla de abajo), y el programa puede usar `li`, `la` y `call` sin restricción.
+- **Las direcciones se arman con `lui`.** Cada dirección base sale de una sola instrucción (tabla de abajo). El programa usa la lista base del instructivo más `lui`, así que puede usar `li`, pero no `la` ni `call`, que se expanden con `auipc`. Las subrutinas se llaman con `jal ra, NOMBRE`.
 - **Los periféricos y la memoria de video se acceden solo con `lw` y `sw`.** El núcleo genera habilitaciones por byte para `sb` y `sh`, pero la interfaz estándar de periféricos del instructivo no las tiene. Un `sb` a un periférico escribiría la palabra entera con el dato desplazado. En la RAM las variables y las casillas también ocupan una palabra, para que todo el programa use las mismas dos instrucciones de memoria.
 - **No hay `mul`.** Los índices salen con desplazamientos: `fila × 8 = fila << 3` para los tableros y `fila × 20 = (fila << 4) + (fila << 2)` para la memoria de video.
 - **La ROM no está en el bus de datos.** El Address Translator no la mapea, así que el programa no puede leer tablas constantes de la ROM con `lw`. Las constantes van como inmediatos. La longitud de un barco, por ejemplo, sale de `4 − id` (4, 3 y 2 casillas para los id 0, 1 y 2).
@@ -162,10 +170,10 @@ Los desplazamientos de `lw` y `sw` son de 12 bits con signo (−2048 a 2047). Co
 | Displays de 7 segmentos | `sw` `0x130(s0)` | `0x0001_0130` |
 | LED de estado | `sw` `0x138(s0)` | `0x0001_0138` |
 | Buzzer | `sw` `0x140(s0)` | `0x0001_0140` |
-| Casilla `(f, c)` del tablero del Jugador 1 en pantalla | `sw` `4 × ((3 + f) × 20 + 1 + c)(s1)` | `0x0001_1000` a `0x0001_17FF` |
-| Casilla `(f, c)` del tablero del Jugador 2 en pantalla | `sw` `4 × ((3 + f) × 20 + 11 + c)(s1)` | `0x0001_1000` a `0x0001_17FF` |
+| Casilla `(f, c)` del tablero del Jugador 1 en pantalla | `sw` `4 × ((4 + f) × 20 + 1 + c)(s1)` | `0x0001_1000` a `0x0001_17FF` |
+| Casilla `(f, c)` del tablero del Jugador 2 en pantalla | `sw` `4 × ((4 + f) × 20 + 11 + c)(s1)` | `0x0001_1000` a `0x0001_17FF` |
 
-Las posiciones de los tableros en pantalla (filas 3 a 10, columnas 1 a 8 y 11 a 18) siguen la distribución de [`PERIFERICO_VGA.md`](../modulos/PERIFERICO_VGA.md).
+Las posiciones de los tableros en pantalla (filas 4 a 11, columnas 1 a 8 y 11 a 18) siguen la distribución de [`PERIFERICO_VGA.md`](../modulos/PERIFERICO_VGA.md).
 
 ### Organización de la RAM
 
@@ -360,4 +368,4 @@ La privacidad se cumple en los dos únicos puntos por donde el programa saca inf
 
 Para transmitir un byte, el programa escribe en `0x0001_0044` y luego activa `send` en `0x0001_0040`. El decodificador de direcciones selecciona UART; sus registros alimentan `uart_tx`, que serializa el dato hacia la PC. Para recibirlo, `uart_rx` carga `reg_rx`, sube `new_rx` y el programa puede consultar `0x0001_0040`, leer `0x0001_0048` y limpiar la bandera. Las esperas del enlace se gestionan por sondeo de esos bits; UART no decide las jugadas.
 
-Las conexiones completas del procesador con RAM, VGA y los demás periféricos siguen pendientes de integración. El periférico VGA ya está implementado y verificado por separado en `src/design/periferico_vga.sv`, pero todavía no aparece instanciado en un `top.sv`.
+Las conexiones completas del procesador con la ROM, la RAM, el controlador de mapeo y los seis periféricos están en `src/design/top.sv`, que además instancia el PLL (`generador_relojes`). `src/sim/tb_top.sv` las verifica con el programa real jugando una partida completa.

@@ -20,7 +20,7 @@ flowchart LR
     SYNC -->|"h_count, v_count"| IDX["CALCULO_INDICE<br/>fila·20 + col"]
     IDX -->|"indice_pix[8:0]"| MEM
     MEM -->|"color[2:0]"| PAL["PALETA<br/>3 bits → RGB444"]
-    MEM -->|"caracter[5:0]"| FUE["FUENTE_CARACTERES<br/>5 × 7, ASCII 0x20-0x5F"]
+    MEM -->|"caracter[5:0], caracter2[5:0],<br/>centrado"| FUE["FUENTE_CARACTERES<br/>5 × 7, ASCII 0x20-0x5F"]
     MEM -->|"borde"| SEL
     SYNC -->|"hsync_n, vsync_n, video_on,<br/>posición en la casilla"| RET["REGISTRO_RETARDO"]
     PAL --> SEL["SELECTOR DE PIXEL<br/>línea / texto / color"]
@@ -43,7 +43,7 @@ casilla de una cuadrícula de 20 × 15 casillas de 32 × 32 píxeles (sección 4
 
 No sabe nada del juego. No conoce tableros, turnos ni barcos. Pinta en cada casilla lo que el
 programa escribió en su palabra, 60 veces por segundo, y nada más: un color de fondo, si lleva o no
-la línea del grid y, si se pidió, una letra o un número encima.
+la línea del grid y, si se pidió, hasta dos letras o números encima, o uno solo centrado.
 
 ---
 
@@ -131,19 +131,25 @@ después. Para la percepción del jugador es instantáneo.
 |---|---|---|
 | `[2:0]` | `color` | Color de fondo de la casilla, entra a la paleta |
 | `[3]` | `borde` | En 1, la casilla lleva una línea negra de 1 píxel en su contorno |
-| `[9:4]` | `caracter` | Letra o número que se dibuja encima, en ASCII − 32. `0` es espacio, sin carácter |
-| `[31:10]` | — | Reservado. Se escribe en 0 |
+| `[9:4]` | `caracter` | Carácter de la mitad izquierda de la casilla, en ASCII − 32. `0` es espacio, sin carácter |
+| `[15:10]` | `caracter2` | Carácter de la mitad derecha, con el mismo código |
+| `[16]` | `centrado` | En 1, se dibuja solo `caracter`, en el centro de la casilla, y `caracter2` se ignora |
+| `[31:17]` | Reservado | Se escribe en 0 |
 
 Los bits reservados se guardan en la memoria (se leen de vuelta con `lw`) pero el barrido los
-ignora. Una palabra con solo `color`, como las que escribía el programa antes del borde y el texto,
-se sigue viendo como un bloque de color sólido.
+ignora. Una palabra con solo `color` se ve como un bloque de color sólido.
 
 El enunciado sugiere los bits `[7:3]` para códigos de carácter. Se usan `[9:4]` porque 5 bits dan
 32 símbolos y el HUD necesita 36 (letras y dígitos), y porque así el bit 3 queda para el borde.
-Con el código en ASCII − 32 el ensamblador calcula los códigos sin tabla ('A' − 32 = 33) y la
-palabra completa sigue debajo de 2048, así que el programa la carga con un solo `addi`.
+Con el código en ASCII − 32 el ensamblador calcula los códigos sin tabla ('A' − 32 = 33).
 
-### Paleta (propuesta)
+Dos caracteres por casilla dan 40 por fila de pantalla, y con eso entran en una sola fila los
+mensajes que necesita el HUD, como `APUNTE CON FLECHAS Y DISPARE CON SW0`. Con uno por casilla
+habría 20 por fila y los mensajes tendrían que partirse en abreviaturas. El bit `centrado` sirve
+para lo que va de a un carácter por casilla, como las letras de columna y los números de fila de
+los tableros, que así quedan alineados con la casilla que nombran.
+
+### Paleta
 
 | `color` | Uso | RGB444 |
 |---|---|---|
@@ -205,25 +211,27 @@ Se usa la cuadrícula de 20 × 15 casillas de 32 × 32 píxeles que sugiere el e
   1200 palabras, y no caben en el rango de `0x0001_1000`–`0x0001_17FF`.
 - **No necesita divisor.** Dividir entre 32 es tomar los bits altos de cada contador:
   `col = h_count[9:5]` (0–19) y `fila = v_count[8:5]` (0–14).
-- **Alcanza para el juego.** Los dos tableros de 8 × 8 ocupan 16 columnas; quedan 4 columnas para
+- **Alcanza para el juego.** Los dos tableros de 8 × 8 ocupan 16 columnas. Quedan 4 columnas para
   los números de fila y la separación, y 7 filas para el HUD.
 
 Distribución de la pantalla que usa el programa (la decide el programa, no el periférico):
 
 ```
 col:      0   1 ........ 8   9  10  11 ....... 18  19
-fila 0        JUGADOR1              JUGADOR2              títulos
-fila 1        barras de estado: COLOCA / LISTO, TURNO JUGADOR n, FIN DE LA PARTIDA
-fila 2        A B C D E F G H       A B C D E F G H        letras de columna
-fila 3-10 1-8 tablero J1 (propio)  1-8 tablero J2 (rival)  con borde
-fila 11
-fila 12       mensaje de traspaso: COLOQUEN SUS BARCOS / USE FLECHAS Y SW0 / ESPERANDO A LA PC
-fila 13
-fila 14       GANADAS J1 00 J2 00
+fila 0        vacía
+fila 1          JUGADOR 1                 JUGADOR 2           títulos
+fila 2        barras de estado: COLOCANDO / LISTO, TURNO DEL JUGADOR n, GANA EL JUGADOR n
+fila 3        A B C D E F G H       A B C D E F G H        letras de columna, centradas
+fila 4-11 1-8 tablero J1 (propio)  1-8 tablero J2 (rival)  con borde, números centrados
+fila 12       mensaje de traspaso: J1 COLOCA CON BOTONES Y J2 DESDE LA PC /
+              APUNTE CON FLECHAS Y DISPARE CON SW0 / ESPERANDO EL DISPARO DEL JUGADOR 2
+fila 13       PARTIDAS GANADAS   J1 00   J2 00
+fila 14       vacía
 ```
 
-Al terminar la partida las filas 11 a 13 se pintan del color del ganador, con
-`GANA EL JUGADOR n` y `SW15 NUEVA PARTIDA`. El detalle está en
+Las filas 0 y 14 quedan vacías porque muchos monitores esconden unos píxeles del borde de la
+imagen. Al terminar la partida las filas 2 y 12 se pintan del color del ganador, con
+`GANA EL JUGADOR n` y `SUBA Y BAJE SW15 PARA OTRA PARTIDA`. El detalle está en
 [`PROGRAMA.md`](PROGRAMA.md).
 
 ### Borde de casilla
@@ -243,24 +251,36 @@ de la pantalla no.
 
 ### Caracteres
 
-Cada casilla se divide en una cuadrícula de 8 × 8 celdas de 4 × 4 píxeles:
+Cada casilla se divide en una cuadrícula de 16 × 16 celdas de 2 × 2 píxeles:
 
 ```
-glifo_col  = h_count[4:2]   (0-7)
-glifo_fila = v_count[4:2]   (0-7)
+celda_col  = h_count[4:1]   (0-15)
+celda_fila = v_count[4:1]   (0-15)
 ```
 
-El glifo de 5 × 7 de [`FUENTE_CARACTERES`](FUENTE_CARACTERES.md) ocupa las columnas 1 a 5 y las filas
-0 a 6, es decir 20 × 28 píxeles. La columna 0 y las columnas 6 y 7 quedan vacías, y la fila 7
-también, así que dos letras en casillas vecinas quedan separadas y se leen como una palabra. El
-píxel es de texto cuando
+El glifo de 5 × 7 de [`FUENTE_CARACTERES`](FUENTE_CARACTERES.md) se dibuja con cada punto en una
+celda, así que mide 10 × 14 píxeles. Va en las filas de celda 5 a 11 (píxeles 10 a 23 de la
+casilla), centrado en vertical. En horizontal depende de `centrado`:
+
+| `centrado` | Carácter | Columnas de celda del glifo | Columna del glifo |
+|---|---|---|---|
+| 0, mitad izquierda (`celda_col` 0 a 7) | `caracter` | 1 a 5 | `celda_col[2:0] − 1` |
+| 0, mitad derecha (`celda_col` 8 a 15) | `caracter2` | 9 a 13 | `celda_col[2:0] − 1` |
+| 1 | `caracter` | 5 a 9 (píxeles 10 a 19) | `celda_col − 5` |
+
+Cada mitad deja una celda libre antes del glifo y dos después, así que dos letras seguidas, en la
+misma casilla o en casillas vecinas, quedan separadas y se leen como una palabra. El píxel es de
+texto cuando
 
 ```
-pixel_texto = (1 <= glifo_col <= 5) & bits_glifo[5 - glifo_col]
+glifo_fila  = celda_fila − 5
+pixel_texto = (0 <= glifo_col <= 4) & (0 <= glifo_fila <= 6) & bits_glifo[4 − glifo_col]
 ```
 
-donde `bits_glifo` es la fila `glifo_fila` del carácter `caracter`. Con `caracter = 0` (espacio) la
-fuente da todo en cero y la casilla queda de su color.
+donde `bits_glifo` es la fila `glifo_fila` del carácter elegido. Las dos restas se hacen en 4 bits
+sin signo: si la celda queda antes del glifo, la resta da la vuelta a un número grande y la
+comparación con 4 (o con 6) la descarta, sin comparar contra el inicio. Con código 0 (espacio) la
+fuente da todo en cero y esa mitad queda del color de la casilla.
 
 ### Prioridad del píxel
 
@@ -291,7 +311,7 @@ dos de lectura:
 | Puerto | Reloj | Acceso | Señales |
 |---|---|---|---|
 | A | `clk_i` | escritura síncrona, lectura combinacional | `write_enable_i`, `addr_i`, `wdata_i`, `rdata_o` |
-| B | `clk_pix_i` | solo lectura, registrada en `color`, `borde` y `caracter` | `indice_pix`, `color`, `borde`, `caracter` |
+| B | `clk_pix_i` | solo lectura, registrada en `color`, `borde`, `caracter`, `caracter2` y `centrado` | `indice_pix`, `color`, `borde`, `caracter`, `caracter2`, `centrado` |
 
 El puerto A se lee de forma combinacional porque así lee el núcleo su RAM de datos. El procesador
 es el núcleo de ciclo único de riscv-simple-sv, cuya memoria de ejemplo (`example_data_memory`)
@@ -325,15 +345,15 @@ lo mismo para que lleguen alineadas con su color:
 
 | Ciclo de `clk_pix_i` | Camino de color | Camino de control |
 |---|---|---|
-| t | contadores → `indice_pix` | contadores → `hsync_n`, `vsync_n`, `video_on`, `en_contorno`, `h_count[4:2]`, `v_count[4:2]` |
-| t + 1 | el registro del puerto B entrega `color`, `borde` y `caracter` → paleta, fuente, selector de píxel → *blanking* | `REGISTRO_RETARDO` entrega `*_d` |
+| t | contadores → `indice_pix` | contadores → `hsync_n`, `vsync_n`, `video_on`, `en_contorno`, `h_count[4:1]`, `v_count[4:1]` |
+| t + 1 | el registro del puerto B entrega `color`, `borde`, `caracter`, `caracter2` y `centrado` → paleta, fuente, selector de píxel → *blanking* | `REGISTRO_RETARDO` entrega `*_d` |
 | t + 2 | `REGISTRO_SALIDA` → `vga_r/g/b_o` | `REGISTRO_SALIDA` → `vga_hsync_o`, `vga_vsync_o` |
 
 Los dos caminos tienen la misma latencia de 2 ciclos. Sin `REGISTRO_RETARDO` la imagen quedaría
 corrida un píxel respecto a los sincronismos, y la línea y las letras un píxel respecto a su
 casilla. La fuente es combinacional y entra en el ciclo t + 1 con el resto del selector, así que
-el borde y el texto no agregan latencia. Con el sistema integrado `clk_pix` cierra arriba de
-100 MHz contra los 25 MHz que necesita. `REGISTRO_SALIDA` además evita que los *glitches*
+el borde y el texto no agregan latencia. Con el sistema integrado, nextpnr-xilinx da cerca de
+92 MHz de máximo para `clk_pix` después del ruteo, contra los 25 MHz que necesita. `REGISTRO_SALIDA` además evita que los *glitches*
 de la paleta y el multiplexor lleguen a los pines.
 
 ### Lectura desde el CPU
@@ -348,9 +368,9 @@ depende de leer la memoria de video.
 La paleta, el cálculo del índice, los comparadores, el selector de píxel y el *blanking* son
 `always_comb` o `assign` con todas sus salidas asignadas en cada camino (la paleta con un `case`
 completo de 8 entradas, la fuente con `default`). Los contadores y los registros de retardo y
-salida están en `always_ff` con reinicio síncrono por `rst_pix`; los registros `color`, `borde` y
-`caracter` y los del sincronizador no lo necesitan. La síntesis con yosys no
-reporta ningún `Latch inferred`.
+salida están en `always_ff` con reinicio síncrono por `rst_pix`. Los registros `color`, `borde`,
+`caracter`, `caracter2` y `centrado` y los del sincronizador no lo necesitan. La síntesis con yosys
+no reporta ningún `Latch inferred`.
 
 ---
 
@@ -384,22 +404,25 @@ flowchart LR
     SUM1 --> SUM2
     SUM2 -->|"indice_pix[8:0]"| MEM
 
-    AND_VO -.->|"video_on"| REG_RET["REG retardo<br/>10 bits"]
+    AND_VO -.->|"video_on"| REG_RET["REG retardo<br/>12 bits"]
     NOT_H -.->|"hsync_n"| REG_RET
     NOT_V -.->|"vsync_n"| REG_RET
 
     CH -->|"h_count[4:0]"| CMP_CT{"CMP<br/>contorno 0 / 31"}
     CV -->|"v_count[4:0]"| CMP_CT
     CMP_CT -.->|"en_contorno"| REG_RET
-    CH -->|"h_count[4:2]"| REG_RET
-    CV -->|"v_count[4:2]"| REG_RET
+    CH -->|"h_count[4:1]"| REG_RET
+    CV -->|"v_count[4:1]"| REG_RET
 
-    MEM -->|"puerto B, bits [9:0]"| REG_COL["REG color, borde, caracter<br/>10 bits"]
+    MEM -->|"puerto B, bits [16:0]"| REG_COL["REG color, borde, caracter,<br/>caracter2, centrado<br/>17 bits"]
     REG_COL -->|"color[2:0]"| MUX_PAL{{"MUX 8 a 1<br/>constantes RGB444"}}
-    REG_COL -->|"caracter[5:0]"| FUE["FUENTE_CARACTERES<br/>ROM comb."]
-    REG_RET -->|"glifo_fila_d"| FUE
-    FUE -->|"bits_glifo[4:0]"| MUX_BIT{{"MUX 5 a 1<br/>por glifo_col_d"}}
-    REG_RET -->|"glifo_col_d"| MUX_BIT
+    REG_COL -->|"caracter[5:0], caracter2[5:0]"| MUX_COD{{"MUX 2 a 1<br/>mitad o centrado"}}
+    REG_COL -.->|"centrado"| MUX_COD
+    REG_RET -->|"celda_col_d"| MUX_COD
+    MUX_COD -->|"codigo[5:0]"| FUE["FUENTE_CARACTERES<br/>ROM comb."]
+    MUX_COD -->|"glifo_col"| MUX_BIT
+    REG_RET -->|"celda_fila_d − 5 = glifo_fila"| FUE
+    FUE -->|"bits_glifo[4:0]"| MUX_BIT{{"MUX 5 a 1<br/>por glifo_col"}}
     MUX_BIT -.->|"pixel_texto"| MUX_SEL{{"MUX 3 a 1<br/>línea / texto / rgb"}}
     REG_COL -.->|"borde"| MUX_SEL
     REG_RET -.->|"en_contorno_d"| MUX_SEL
@@ -452,8 +475,9 @@ Conexiones en `src/design/top.sv`, instancia `u_periferico_vga`:
 - `vga_r_o`, `vga_g_o`, `vga_b_o`, `vga_hsync_o`, `vga_vsync_o`, a los puertos del top con el
   mismo nombre.
 
-Adentro, `u_fuente` es la instancia de `fuente_caracteres`, con `codigo_i` en `caracter`,
-`fila_i` en `glifo_fila_d` y `bits_o` en `glifo_bits`.
+Adentro, `u_fuente` es la instancia de `fuente_caracteres`, con `codigo_i` en `codigo` (`caracter`
+o `caracter2` según la mitad de la casilla y `centrado`), `fila_i` en `glifo_fila[2:0]` y `bits_o` en
+`glifo_bits`.
 
 ---
 
@@ -461,7 +485,7 @@ Adentro, `u_fuente` es la instancia de `fuente_caracteres`, con `codigo_i` en `c
 
 `src/sim/tb_periferico_vga.sv` corre el periférico solo, con los dos relojes a su frecuencia real,
 y compara **cada píxel de cuadros completos** contra un modelo que lleva el testbench aparte. El
-modelo guarda `[9:0]` de cada palabra escrita y calcula el píxel esperado con la misma prioridad
+modelo guarda `[16:0]` de cada palabra escrita y calcula el píxel esperado con la misma prioridad
 de la sección h): contorno, texto, paleta. La paleta está escrita de nuevo a mano en el testbench.
 La fuente la lee una vez al arrancar de otra instancia de `fuente_caracteres`, para no copiarla, y
 se revisa aparte que la `A` coincida con su dibujo hecho a mano y que el espacio no dibuje nada.
@@ -469,8 +493,9 @@ se revisa aparte que la `A` coincida con su dibujo hecho a mano y que el espacio
 Entre las 28 pruebas están la temporización de `hsync` y `vsync`, la lectura combinacional del
 puerto A, un cuadro con un impacto en (3, 5) que tiene que ocupar exactamente
 `h = 160..191` y `v = 96..127`, un cuadro con los 8 colores y basura aleatoria en los bits `[31:3]`
-(eso enciende el borde en cerca de la mitad de las casillas y pone caracteres al azar en todas),
-escrituras a mitad de cuadro y un reinicio que no borra la memoria.
+(eso enciende el borde y el centrado en cerca de la mitad de las casillas, pone caracteres al azar en
+las dos mitades de todas y prueba que el barrido ignora `[31:17]`), escrituras a mitad de cuadro y
+un reinicio que no borra la memoria.
 
 `src/sim/tb_top.sv` lo prueba dentro del sistema completo con el programa real: que las 128
 casillas de los tableros lleven el borde y ninguna otra, y que los textos del HUD digan lo que
