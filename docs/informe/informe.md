@@ -248,11 +248,11 @@ T_{byte}=\frac{10}{115\,200}=86{,}806\,\mu\text{s}
 Los divisores se redondean al entero más cercano. Para el sistema,
 
 ```math
-N_{TX}=\operatorname{round}\left(\frac{33\,333\,333}{115\,200}\right)=289
+N_{TX}=\mathrm{round}\left(\frac{33\,333\,333}{115\,200}\right)=289
 ```
 
 ```math
-N_{RX}=\operatorname{round}\left(\frac{33\,333\,333}{16\cdot115\,200}\right)=18
+N_{RX}=\mathrm{round}\left(\frac{33\,333\,333}{16\cdot115\,200}\right)=18
 ```
 
 El baudaje efectivo de TX es aproximadamente 115 340 baudios, un error de +0,122 %. El ritmo
