@@ -136,10 +136,10 @@ el PC y el registro de destino.
 
 Para una carga, el presupuesto temporal incluye un camino aproximado de:
 
-$$
-T_{clk} \geq T_{PC} + T_{ROM} + T_{decodificación/registros} + T_{ALU}
+```math
+T_{clk} \geq T_{PC} + T_{ROM} + T_{\text{decodificación/registros}} + T_{ALU}
 + T_{mapeo/memoria/MUX} + T_{setup}
-$$
+```
 
 Por eso el sistema corre a 33,33 MHz, con un período nominal de 30 ns, aunque el oscilador de
 entrada sea de 100 MHz. La frecuencia máxima sale del diseño implementado (sección 10.5). Que un
@@ -173,14 +173,14 @@ habilitación. No se implementa una excepción de bus por acceso inválido.
 La primitiva `PLLE2_BASE` recibe 100 MHz, multiplica por 10 y divide la entrada por 1. El VCO queda
 en 1000 MHz y sus divisores de salida son 30 y 40:
 
-$$
+```math
 f_{VCO}=100\,\text{MHz}\cdot\frac{10}{1}=1000\,\text{MHz}
-$$
+```
 
-$$
-f_{sys}=\frac{1000}{30}\,\text{MHz}=33,333\ldots\,\text{MHz},
+```math
+f_{sys}=\frac{1000}{30}\,\text{MHz}=33{,}333\ldots\,\text{MHz},
 \qquad f_{pix}=\frac{1000}{40}\,\text{MHz}=25\,\text{MHz}
-$$
+```
 
 Ambos relojes provienen del mismo VCO, así que quedan relacionados en fase. Las salidas pasan por
 `BUFG`, y el reset del sistema se mantiene mientras el PLL no esté enganchado. En la simulación
@@ -203,15 +203,15 @@ y back porch, y lo mismo sucede con las líneas de cada cuadro [4].
 
 Con un reloj de 25 MHz,
 
-$$
+```math
 T_{pix}=40\,\text{ns},\qquad
-T_{línea}=800\cdot40\,\text{ns}=32\,\mu\text{s}
-$$
+T_{\text{línea}}=800\cdot40\,\text{ns}=32\,\mu\text{s}
+```
 
-$$
-T_{cuadro}=525\cdot32\,\mu\text{s}=16,8\,\text{ms},\qquad
-f_{cuadro}=59,5238\,\text{Hz}
-$$
+```math
+T_{cuadro}=525\cdot32\,\mu\text{s}=16{,}8\,\text{ms},\qquad
+f_{cuadro}=59{,}5238\,\text{Hz}
+```
 
 Los sincronismos tienen polaridad negativa. El horizontal se queda en bajo 3,84 µs por línea y el
 vertical 64 µs por cuadro. Los RGB se fuerzan a negro fuera del área visible.
@@ -222,9 +222,9 @@ diferencia está dentro de la tolerancia de los monitores.
 
 Un framebuffer RGB de 12 bits para todos los píxeles necesitaría
 
-$$
+```math
 640\cdot480\cdot12=3\,686\,400\,\text{bits}=460\,800\,\text{bytes}
-$$
+```
 
 El diseño utiliza 300 casillas visibles de 32 bits, equivalentes a 1200 bytes, dentro de una
 memoria de 512 palabras o 2048 bytes. El barrido calcula el índice de casilla a partir de los
@@ -241,19 +241,19 @@ mostrarlos pertenecen al programa.
 La UART usa tramas 8N1, con un bit de arranque en cero, ocho bits LSB primero, sin paridad y un
 bit de parada en uno. La línea queda en alto en reposo. Un byte tarda idealmente
 
-$$
-T_{byte}=\frac{10}{115\,200}=86,806\,\mu\text{s}
-$$
+```math
+T_{byte}=\frac{10}{115\,200}=86{,}806\,\mu\text{s}
+```
 
 Los divisores se redondean al entero más cercano. Para el sistema,
 
-$$
+```math
 N_{TX}=\operatorname{round}\left(\frac{33\,333\,333}{115\,200}\right)=289
-$$
+```
 
-$$
+```math
 N_{RX}=\operatorname{round}\left(\frac{33\,333\,333}{16\cdot115\,200}\right)=18
-$$
+```
 
 El baudaje efectivo de TX es aproximadamente 115 340 baudios, un error de +0,122 %. El ritmo
 equivalente de RX es 115 741 baudios, un error de +0,469 %, el mismo que a 100 MHz. El receptor
@@ -287,9 +287,9 @@ el bus es agregar dos flip-flops por entrada y un filtro de estabilidad de unos 
 Los cuatro dígitos de 7 segmentos comparten las líneas de segmentos y activan un ánodo a la vez.
 Con el contador de refresco de 18 bits,
 
-$$
-f_{refresco}=\frac{33\,333\,333}{2^{18}}\approx127,16\,\text{Hz}
-$$
+```math
+f_{refresco}=\frac{33\,333\,333}{2^{18}}\approx127{,}16\,\text{Hz}
+```
 
 Cada dígito permanece seleccionado aproximadamente 1,966 ms, sin parpadeo visible. El registro del
 display recibe cuatro nibbles BCD y cuatro bits de punto decimal. El programa conserva las ganadas
@@ -298,9 +298,9 @@ de cada jugador en dos dígitos y hace el retorno de 99 a 00.
 El buzzer pasivo recibe una onda cuadrada. Para una nota de frecuencia $f$, el generador conmuta
 la salida cada $N+1$ ciclos, con
 
-$$
+```math
 N=\left\lfloor\frac{f_{sys}}{2f}\right\rfloor-1
-$$
+```
 
 La nota más grave (A3, 220 Hz) da N = 75 756, que cabe en los 18 bits del contador. El secuenciador
 selecciona notas y duraciones, en unidades nominales de 50 ms, para distinguir impacto, fallo,
@@ -628,9 +628,9 @@ El rango del periférico es `0x0001_1000` a `0x0001_17FF`. Contiene 512 palabras
 cuadrícula visible usa los índices 0 a 299. El resto es direccionable por el procesador, aunque el
 barrido no lo utiliza. La última palabra visible comienza en `0x0001_14AC`.
 
-$$
+```math
 \text{dirección}=0x0001\_1000+4\cdot(20\cdot fila+columna)
-$$
+```
 
 | Bits de una palabra | Campo | Función |
 |---|---|---|
@@ -657,10 +657,10 @@ $$
 Los tableros usan las filas de pantalla 4 a 11. J1 usa las columnas 1 a 8 y el estado conocido del
 tablero de J2 usa las columnas 11 a 18. En pantalla quedan en
 
-$$
+```math
 fila_{pantalla}=4+fila_{juego},\qquad
 columna_{pantalla}=1+10\cdot jugador+columna_{juego}
-$$
+```
 
 La fila 1 contiene títulos, la 2 la colocación, el turno o el ganador, y la 3 las letras A a H.
 Los números de fila aparecen en las columnas 0 y 10. La fila 12 explica la acción del jugador y la
@@ -746,9 +746,9 @@ forma parte del contrato de transporte (sección 7.3).
 
 Todas las tramas tienen cinco bytes,
 
-$$
+```math
 [\,0xAA,\ TIPO,\ D1,\ D2,\ TIPO\oplus D1\oplus D2\,]
-$$
+```
 
 | Dirección | Tipo | Nombre | D1 | D2 |
 |---|---|---|---|---|
