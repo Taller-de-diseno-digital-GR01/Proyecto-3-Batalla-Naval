@@ -9,12 +9,25 @@ src/build/
 
 # Artefactos de sesion de Vivado (batch mode, generados en el cwd al invocarlo)
 .Xil/
+# Proyectos que crea la GUI de Vivado, cada quien tiene el suyo
+project_3_battleship/
+*.xpr
 *.jou
 *.log
 *.tcl
 clockInfo.txt
+# Menos el script de make sim-post, ese es fuente
+!src/fpga/vivado_timesim.tcl
+# Ni los logs que el informe cita como evidencia
+!docs/informe/evidencia/*.log
 
 __pycache__/
 *.pyc
 
 sw/.venv/
+
+#archivos lock de PDFs
+.~lock.*#
+
+# Intermedios del ensamblado (sw/ensamblar.sh). El .hex de la ROM si se versiona.
+sw/build/
