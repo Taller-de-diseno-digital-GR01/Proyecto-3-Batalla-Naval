@@ -1,20 +1,19 @@
-# Informe técnico, Proyecto 3: Batalla Naval sobre RISC-V con VGA y terminal de PC
+# Informe técnico del Proyecto 3, Batalla Naval sobre RISC-V con VGA y terminal de PC
 
-**Curso:** EL3313 Taller de Diseño Digital, II Semestre 2026  
-**Escuela de Ingeniería Electrónica, Tecnológico de Costa Rica**  
-**Profesores:** Dr.-Ing. Jeferson González-Gómez, Ing. Rolen Coto Calderón
+EL3313 Taller de Diseño Digital, II Semestre 2026  
+Escuela de Ingeniería Electrónica, Tecnológico de Costa Rica  
+Profesores Dr.-Ing. Jeferson González-Gómez e Ing. Rolen Coto Calderón
 
-**Integrantes:**
+Integrantes
 
 - Carlos Castro Villegas
 - Jefferson Chinchilla Quesada
 - Mattio Coghi Quirós
 - Nicolás Mena Valerio
 
-**Versión documentada:** rama `develop`, commit `0b7f58d` (el código no cambia después de ese commit).  
-**Fecha:** 8 de octubre de 2026.
-
----
+Versión documentada, rama `develop` en el commit `9e83b8b`. Los commits posteriores solo cambian
+la documentación.  
+8 de octubre de 2026
 
 ## Tabla de contenidos
 
@@ -34,28 +33,27 @@
 14. [Conclusiones y aprendizaje obtenido](#14-conclusiones-y-aprendizaje-obtenido)
 15. [Referencias](#15-referencias)
 
----
-
 ## 1. Resumen
 
 Se integró una plataforma de 32 bits en la FPGA Artix-7 de la tarjeta Basys 3 que ejecuta el
 juego Batalla Naval para dos jugadores. La plataforma contiene un procesador RISC-V de ciclo único,
 una ROM de programa de 8 KiB, una RAM de datos de 4 KiB, un Address Translator, un multiplexor de
-lectura y seis periféricos: UART, entradas locales, display de 7 segmentos, LED, buzzer y VGA.
+lectura y seis periféricos (UART, entradas locales, display de 7 segmentos, LED, buzzer y VGA).
 El núcleo del procesador se reutilizó y adaptó de `riscv-simple-sv`, conservando su licencia
 BSD-3. La integración, los periféricos y el programa del juego son trabajo del equipo.
 
 La lógica de la partida se ejecuta en ensamblador dentro de la FPGA. Cada jugador dispone de un
-tablero de 8 × 8 casillas y coloca tres barcos de longitudes 4, 3 y 2. El Jugador 1 usa los controles
-de la Basys 3 y un monitor VGA. El Jugador 2 usa una terminal Python conectada por UART a
+tablero de 8 × 8 casillas y coloca tres barcos de longitudes 4, 3 y 2. El Jugador 1 usa los
+controles de la Basys 3 y un monitor VGA. El Jugador 2 usa una terminal Python conectada por UART a
 115 200 baudios. La PC transmite solicitudes y representa las respuestas. La validación de
 colocaciones, los disparos, los hundimientos, los turnos y la victoria se resuelven en el programa
 RISC-V. Los barcos no descubiertos del oponente permanecen ocultos en ambas interfaces.
 
-Un PLL deriva del oscilador de 100 MHz dos relojes: 33,33 MHz para el procesador y los periféricos
-de registros, y 25 MHz para el barrido de video de 640 × 480. El periférico VGA usa una cuadrícula
+Un PLL saca dos relojes del oscilador de 100 MHz. El procesador y los periféricos de registros
+corren a 33,33 MHz y el barrido de video de 640 × 480 a 25 MHz. El periférico VGA usa una cuadrícula
 de 20 × 15 casillas de 32 × 32 píxeles, con color, bordes y texto, en lugar de un framebuffer por
-píxel. El programa ocupa 1264 palabras de instrucción, equivalentes a 5056 bytes o 61,72 % de la ROM.
+píxel. El programa ocupa 1264 palabras de instrucción, equivalentes a 5056 bytes o 61,72 % de la
+ROM.
 
 Los 15 testbenches autoverificables del hardware pasan sin fallos, entre ellos las 29 pruebas
 rv32ui del procesador y las 82 verificaciones del sistema completo, que juegan una partida entera
@@ -67,8 +65,6 @@ post-implementación temporizada, sobre el netlist ruteado por Vivado con sus re
 arranque del programa, la colocación de las dos flotas y un disparo de cada jugador, y pasa sus 19
 verificaciones sin violaciones de setup ni de hold (sección 10.7).
 
----
-
 ## 2. Introducción y objetivos
 
 El Proyecto 3 cambia la forma de implementar el control respecto al Ahorcado. En el proyecto
@@ -79,15 +75,15 @@ el procesador ejecuta desde la ROM.
 
 Esta separación permite analizar tanto el diseño digital como la relación entre software y
 hardware. Un `lw` lee una variable o el estado de un periférico. Un `sw` actualiza una variable,
-escribe una casilla de video o inicia una transmisión. Las interfaces y los tiempos del hardware
-condicionan el programa: las memorias deben responder dentro del ciclo del procesador y la UART
-de un solo byte exige atender la recepción con suficiente frecuencia.
+escribe una casilla de video o inicia una transmisión. Los tiempos del hardware le ponen límites al
+programa. Las memorias tienen que responder dentro del ciclo del procesador, y como la UART guarda
+un solo byte, el programa tiene que atender la recepción seguido.
 
-**Objetivo general.** Implementar una plataforma RISC-V en la FPGA que ejecute el control completo
-de Batalla Naval y coordine un jugador local con otro remoto mediante UART, preservando la
-privacidad de sus tableros.
+El objetivo general es implementar una plataforma RISC-V en la FPGA que ejecute el control
+completo de Batalla Naval y coordine un jugador local con otro remoto mediante UART, sin que
+ninguno vea el tablero del otro.
 
-**Objetivos específicos.**
+Objetivos específicos
 
 1. Integrar un procesador de 32 bits de ciclo único, con buses independientes de instrucciones y
    datos, capaz de ejecutar el subconjunto requerido por el programa.
@@ -101,8 +97,6 @@ privacidad de sus tableros.
 7. Verificar por etapas el procesador, los periféricos y el sistema integrado, distinguiendo
    simulación funcional, síntesis, timing y prueba en la tarjeta.
 
----
-
 ## 3. Fundamentación teórica
 
 ### 3.1 Arquitectura RISC-V y subconjunto utilizado
@@ -113,16 +107,14 @@ almacenamientos [2]. La implementación emplea registros y buses de 32 bits, ins
 como argumentos de las subrutinas del juego, `ra` conserva la dirección de retorno y `sp`
 direcciona la pila.
 
-Los campos comunes de una instrucción se extraen así:
+Los campos comunes de una instrucción son estos.
 
-| Campo | Bits | Función |
-|---|---|---|
-| `opcode` | 6:0 | Familia de instrucción |
-| `rd` | 11:7 | Registro de destino |
-| `funct3` | 14:12 | Variante de la operación |
-| `rs1` | 19:15 | Primer operando |
-| `rs2` | 24:20 | Segundo operando, cuando corresponde |
-| `funct7` | 31:25 | Diferencia operaciones que comparten otros campos |
+- `opcode`, bits 6:0. Familia de instrucción.
+- `rd`, bits 11:7. Registro de destino.
+- `funct3`, bits 14:12. Variante de la operación.
+- `rs1`, bits 19:15. Primer operando.
+- `rs2`, bits 24:20. Segundo operando, cuando corresponde.
+- `funct7`, bits 31:25. Diferencia operaciones que comparten otros campos.
 
 El programa usa cargas y escrituras de palabra (`lw`, `sw`), operaciones aritméticas y lógicas,
 desplazamientos, comparaciones, ramas y saltos, es decir, la lista base del instructivo. Añade
@@ -131,9 +123,9 @@ desplazamientos, comparaciones, ramas y saltos, es decir, la lista base del inst
 instrucciones reales resultantes de su expansión. El script de ensamblado rechaza cualquier
 instrucción fuera de esa lista.
 
-El núcleo reutilizado implementa todo `rv32i` [3]. Sin embargo, el envoltorio de la plataforma no
-conecta una máscara de bytes: su contrato de acceso a los periféricos y la RAM es `lw` y `sw`
-alineados de 32 bits, que es lo que pide la interfaz estándar del instructivo.
+El núcleo reutilizado implementa todo `rv32i` [3], pero el envoltorio de la plataforma no conecta
+una máscara de bytes. A los periféricos y la RAM solo se accede con `lw` y `sw` alineados de
+32 bits, que es lo que pide la interfaz estándar del instructivo.
 
 ### 3.2 Procesador de ciclo único y camino crítico
 
@@ -149,10 +141,9 @@ T_{clk} \geq T_{PC} + T_{ROM} + T_{decodificación/registros} + T_{ALU}
 + T_{mapeo/memoria/MUX} + T_{setup}
 $$
 
-Esta es la razón para usar 33,33 MHz en el sistema, con un período nominal de 30 ns, aunque el
-oscilador de entrada sea de 100 MHz. La frecuencia máxima se obtiene del diseño implementado
-(sección 10.5): que un testbench use un reloj determinado no demuestra que el hardware cierre
-timing a esa frecuencia.
+Por eso el sistema corre a 33,33 MHz, con un período nominal de 30 ns, aunque el oscilador de
+entrada sea de 100 MHz. La frecuencia máxima sale del diseño implementado (sección 10.5). Que un
+testbench use cierto reloj no demuestra que el hardware cierre timing a esa frecuencia.
 
 ### 3.3 Memorias separadas y periféricos mapeados
 
@@ -173,8 +164,8 @@ sw   t1, 0x138(s0)      # encender el LED de batalla
 ```
 
 El Address Translator genera habilitaciones de escritura y una selección para el MUX de lectura.
-Los datos no atraviesan el AT: `DataOut_o` llega directamente a los destinos y sus datos de retorno
-llegan al MUX. Las direcciones no asignadas o no alineadas producen lectura cero y ninguna
+Los datos no pasan por el AT. `DataOut_o` llega directo a los destinos y lo que estos devuelven
+llega al MUX. Las direcciones no asignadas o no alineadas producen lectura cero y ninguna
 habilitación. No se implementa una excepción de bus por acceso inválido.
 
 ### 3.4 Generación de relojes con PLL
@@ -192,9 +183,9 @@ f_{sys}=\frac{1000}{30}\,\text{MHz}=33,333\ldots\,\text{MHz},
 $$
 
 Ambos relojes provienen del mismo VCO, así que quedan relacionados en fase. Las salidas pasan por
-`BUFG`, y el reset del sistema se mantiene mientras el PLL no esté enganchado. El modelo RTL de
-simulación sustituye la primitiva por divisores: conserva los períodos nominales, pero el reloj
-de sistema no tiene un ciclo de trabajo del 50 % (el diseño usa solo el flanco de subida). Ese
+`BUFG`, y el reset del sistema se mantiene mientras el PLL no esté enganchado. En la simulación
+RTL la primitiva se reemplaza por divisores con los mismos períodos nominales, aunque el reloj de
+sistema no queda con ciclo de trabajo del 50 % (el diseño usa solo el flanco de subida). Ese
 modelo no representa jitter, tiempos internos ni el comportamiento analógico del PLL.
 
 ### 3.5 Temporización VGA
@@ -210,7 +201,7 @@ y back porch, y lo mismo sucede con las líneas de cada cuadro [4].
 | Back porch | 48 | 33 |
 | Total | 800 | 525 |
 
-Con un reloj de 25 MHz:
+Con un reloj de 25 MHz,
 
 $$
 T_{pix}=40\,\text{ns},\qquad
@@ -222,14 +213,14 @@ T_{cuadro}=525\cdot32\,\mu\text{s}=16,8\,\text{ms},\qquad
 f_{cuadro}=59,5238\,\text{Hz}
 $$
 
-Los sincronismos tienen polaridad negativa: el horizontal permanece bajo 3,84 µs por línea y el
-vertical permanece bajo 64 µs por cuadro. Los RGB se fuerzan a negro fuera del área visible.
+Los sincronismos tienen polaridad negativa. El horizontal se queda en bajo 3,84 µs por línea y el
+vertical 64 µs por cuadro. Los RGB se fuerzan a negro fuera del área visible.
 El cálculo corresponde a 25 MHz y no al modo de 25,175 MHz y aproximadamente 59,94 Hz. La
 diferencia está dentro de la tolerancia de los monitores.
 
 ### 3.6 Gráficos por casillas y fuente de caracteres
 
-Un framebuffer RGB de 12 bits para todos los píxeles requeriría:
+Un framebuffer RGB de 12 bits para todos los píxeles necesitaría
 
 $$
 640\cdot480\cdot12=3\,686\,400\,\text{bits}=460\,800\,\text{bytes}
@@ -247,14 +238,14 @@ mostrarlos pertenecen al programa.
 
 ### 3.7 Comunicación UART
 
-La UART utiliza tramas 8N1: un bit de arranque en cero, ocho bits LSB primero, sin paridad y un bit
-de parada en uno. La línea permanece alta en reposo. Un byte tarda idealmente:
+La UART usa tramas 8N1, con un bit de arranque en cero, ocho bits LSB primero, sin paridad y un
+bit de parada en uno. La línea queda en alto en reposo. Un byte tarda idealmente
 
 $$
 T_{byte}=\frac{10}{115\,200}=86,806\,\mu\text{s}
 $$
 
-Los divisores se redondean al entero más cercano. Para el sistema:
+Los divisores se redondean al entero más cercano. Para el sistema,
 
 $$
 N_{TX}=\operatorname{round}\left(\frac{33\,333\,333}{115\,200}\right)=289
@@ -294,7 +285,7 @@ el bus es agregar dos flip-flops por entrada y un filtro de estabilidad de unos 
 ### 3.9 Multiplexado de displays y generación de sonido
 
 Los cuatro dígitos de 7 segmentos comparten las líneas de segmentos y activan un ánodo a la vez.
-Con el contador de refresco de 18 bits:
+Con el contador de refresco de 18 bits,
 
 $$
 f_{refresco}=\frac{33\,333\,333}{2^{18}}\approx127,16\,\text{Hz}
@@ -305,7 +296,7 @@ display recibe cuatro nibbles BCD y cuatro bits de punto decimal. El programa co
 de cada jugador en dos dígitos y hace el retorno de 99 a 00.
 
 El buzzer pasivo recibe una onda cuadrada. Para una nota de frecuencia $f$, el generador conmuta
-la salida cada $N+1$ ciclos:
+la salida cada $N+1$ ciclos, con
 
 $$
 N=\left\lfloor\frac{f_{sys}}{2f}\right\rfloor-1
@@ -313,8 +304,8 @@ $$
 
 La nota más grave (A3, 220 Hz) da N = 75 756, que cabe en los 18 bits del contador. El secuenciador
 selecciona notas y duraciones, en unidades nominales de 50 ms, para distinguir impacto, fallo,
-hundimiento, colocación inválida y victoria. Ese secuenciador no decide qué ocurrió en la partida:
-reproduce el código de sonido escrito por el programa.
+hundimiento, colocación inválida y victoria. Qué pasó en la partida lo decide el programa, y el
+secuenciador solo reproduce el código de sonido que este le escribe.
 
 ### 3.10 Diseño combinacional sin latches
 
@@ -323,10 +314,8 @@ Los valores por defecto y las ramas `default` evitan retener accidentalmente el 
 anterior. La revisión del RTL se complementa con el resultado de `proc` de yosys, que informa cada
 señal combinacional en la que no infiere un latch, con la estadística de celdas del netlist y con
 un linter (Verilator), que avisa de latches, de asignaciones con retardo dentro de lógica
-combinacional y de señales con más de un driver. Una RAM o un registro explícito es almacenamiento
-intencional, no un latch accidental.
-
----
+combinacional y de señales con más de un driver. Las RAM y los registros explícitos guardan datos a
+propósito y no cuentan como latch.
 
 ## 4. Enfoque de la solución
 
@@ -338,9 +327,9 @@ los módulos. Los documentos detallados están en [`docs/diseño/diagramas/`](..
 [`docs/diseño/diseño.md`](../diseño/diseño.md). Los diagramas de este informe resumen la
 integración de [`top.sv`](../../src/design/top.sv).
 
-**Nivel 1: sistema y jugadores.** El jugador local obtiene información mediante VGA e indicadores.
-El remoto intercambia solicitudes y resultados mediante UART. La FPGA conserva el estado válido
-de la partida.
+En el nivel 1, el del sistema y los jugadores, el jugador local ve la partida en el VGA y los
+indicadores, y el remoto intercambia solicitudes y resultados por UART. La FPGA guarda el estado
+válido de la partida.
 
 ```mermaid
 flowchart TD
@@ -351,8 +340,8 @@ flowchart TD
     CLK["Oscilador de 100 MHz"] --> SYS
 ```
 
-**Nivel 2: plataforma computacional.** La ROM está fuera del bus de datos. El bloque de mapeo
-agrupa únicamente la decodificación y el MUX de retorno, y no contiene reglas de juego.
+El nivel 2 es la plataforma computacional. La ROM está fuera del bus de datos, y el bloque de
+mapeo solo tiene la decodificación y el MUX de retorno, sin reglas de juego.
 
 ```mermaid
 flowchart TD
@@ -366,8 +355,8 @@ flowchart TD
     VGA --> MON["Monitor"]
 ```
 
-**Nivel 3: control del bus y retorno de datos.** El procesador se representa como bloque externo.
-Su descripción interna pertenece a la ficha del núcleo.
+El nivel 3 muestra el control del bus y el retorno de datos. Aquí el procesador es un bloque
+externo, y su interior se describe en la ficha del núcleo.
 
 ```mermaid
 flowchart TD
@@ -381,7 +370,7 @@ flowchart TD
 ```
 
 En `top.sv`, `clk_sys` llega al núcleo, la RAM y los periféricos, y `clk_pix` llega al barrido VGA.
-UART y buzzer reciben `CLK_FREQ_HZ = 33_333_333`. El top adapta los índices de registro:
+UART y buzzer reciben `CLK_FREQ_HZ = 33_333_333`. El top adapta los índices de registro.
 
 - UART usa `data_address[3:2]` para CONTROL, TX y RX.
 - Entradas, display, LED y buzzer reciben `addr_i = 00`, porque tienen un solo registro.
@@ -390,26 +379,40 @@ UART y buzzer reciben `CLK_FREQ_HZ = 33_333_333`. El top adapta los índices de 
 
 ### 4.2 Decisiones de diseño y su justificación
 
-| # | Decisión | Justificación y alcance |
-|---|---|---|
-| D1 | Control del juego en ensamblador. | Cumple la separación requerida: hardware para E/S y programa para reglas. |
-| D2 | Núcleo uniciclo reutilizado y adaptado. | Proporciona una base modular y pruebas de instrucciones. Se declara su procedencia y licencia. |
-| D3 | Buses separados de instrucciones y datos. | La búsqueda de una instrucción no comparte el puerto de la RAM de datos. |
-| D4 | Lecturas combinacionales en ROM, RAM y memoria de video, en LUTRAM. | Permiten ejecutar cargas en un ciclo sin tocar el núcleo. Excluyen la BRAM, que lee en forma síncrona. |
-| D5 | Reloj de sistema de 33,33 MHz. | Da un período de 30 ns frente al camino largo del uniciclo y conserva divisores UART adecuados. |
-| D6 | Reloj de píxel de 25 MHz. | Produce barrido nominal de 59,52 Hz con 800 × 525 posiciones. |
-| D7 | AT separado del MUX de lectura. | Mantiene el AT como lógica de selección y permite verificar el retorno con valores conocidos. |
-| D8 | Solo palabras alineadas de 32 bits. | Coincide con `lw` y `sw` utilizados por el programa y con la interfaz sin máscara de bytes. |
-| D9 | VGA por casillas con color, borde y texto. | Reduce almacenamiento y escrituras respecto a un framebuffer por píxel. |
-| D10 | Una sola fuente de estado de partida en RAM. | VGA y PC representan ese estado. No deciden por su cuenta impactos ni victoria. |
-| D11 | Un mensaje pendiente en la PC. | Simplifica la asociación solicitud y respuesta (sección 7.4). |
-| D12 | Pausa de 1 ms entre bytes PC → FPGA. | Da margen al receptor de un solo byte y al lazo de sondeo del programa. |
-| D13 | Ganadas almacenadas en BCD. | La salida al display no necesita conversión binario a decimal. |
-| D14 | Reinicio de partida atendido en software. | Conserva las ganadas, mientras la reconfiguración general (PROG) vuelve a inicializar el sistema. |
-| D15 | Sonidos seleccionados por código. | El programa decide el evento y el periférico ejecuta su melodía sin bloquear el juego. |
-| D16 | Entradas sin antirrebote y con un solo registro. | Autorizado por el profesor (3 de octubre): los botones de la Basys 3 llegan filtrados. El flanco lo obtiene el programa. |
-| D17 | RX sin sincronizador de dos flip-flops. | Igual que el núcleo del curso, confirmado por el profesor (22 de setiembre). |
-| D18 | Bitstream grabado en la flash. | El reinicio general es el botón PROG, que reconfigura la FPGA desde la flash. |
+- D1, control del juego en ensamblador. Cumple la separación que pide el instructivo, con el
+  hardware para E/S y el programa para las reglas.
+- D2, núcleo uniciclo reutilizado y adaptado. Da una base modular y pruebas de instrucciones. Su
+  procedencia y licencia están declaradas.
+- D3, buses separados de instrucciones y datos. Buscar una instrucción no ocupa el puerto de la
+  RAM de datos.
+- D4, lecturas combinacionales en ROM, RAM y memoria de video, en LUTRAM. Así una carga termina en
+  un ciclo sin tocar el núcleo, y por lo mismo queda fuera la BRAM, que lee en forma síncrona.
+- D5, reloj de sistema de 33,33 MHz. Da 30 ns para el camino largo del uniciclo y deja divisores de
+  UART con poco error.
+- D6, reloj de píxel de 25 MHz, que con 800 × 525 posiciones da un barrido de 59,52 Hz.
+- D7, AT separado del MUX de lectura. El AT queda como pura lógica de selección y el retorno se
+  verifica aparte con valores conocidos.
+- D8, solo palabras alineadas de 32 bits, que es lo que usa el programa con `lw` y `sw` y lo que
+  permite una interfaz sin máscara de bytes.
+- D9, VGA por casillas con color, borde y texto. Gasta mucha menos memoria y menos escrituras que un
+  framebuffer por píxel.
+- D10, el estado de la partida vive solo en la RAM. El VGA y la PC lo muestran, pero no deciden
+  impactos ni victoria por su cuenta.
+- D11, un solo mensaje pendiente en la PC, para asociar cada respuesta con su solicitud sin más
+  maquinaria (sección 7.4).
+- D12, pausa de 1 ms entre bytes de la PC a la FPGA. Le da margen al receptor de un solo byte y al
+  lazo de sondeo del programa.
+- D13, ganadas guardadas en BCD, para mandarlas al display sin convertir de binario.
+- D14, reinicio de partida atendido en software. Conserva las ganadas, y la reconfiguración general
+  con PROG es la que inicializa todo.
+- D15, sonidos elegidos por código. El programa decide el evento y el periférico toca la melodía sin
+  bloquear el juego.
+- D16, entradas sin antirrebote y con un solo registro. Lo autorizó el profesor el 3 de octubre,
+  porque los botones de la Basys 3 llegan filtrados. El flanco lo saca el programa.
+- D17, RX sin sincronizador de dos flip-flops, igual que el núcleo del curso. El profesor lo
+  confirmó el 22 de setiembre.
+- D18, bitstream grabado en la flash. El reinicio general es el botón PROG, que reconfigura la FPGA
+  desde ahí.
 
 ### 4.3 Codificación de estado y organización de la RAM
 
@@ -438,7 +441,8 @@ por separado el número de impactos de cada barco.
 
 Las variables ocupan 612 bytes desde `0x2000` y la pila usa la parte superior de la RAM. La rutina
 `NUEVA_PARTIDA` limpia ese bloque de variables y vuelve a escribir las ganadas que leyó antes de
-limpiar. La RAM no tiene reset de borrado global: el programa inicializa las posiciones que necesita.
+limpiar. La RAM no tiene un reset que la borre entera, así que el programa inicializa las
+posiciones que necesita.
 
 ### 4.4 Asignación de pines y controles
 
@@ -446,27 +450,25 @@ La fuente de la asignación es [`basys3.xdc`](../../src/fpga/basys3.xdc). Todos 
 `LVCMOS33`. La Basys 3 trae cinco pulsadores y el juego necesita siete entradas, así que los
 pulsadores se destinan a las direcciones y la rotación, y `btn_ok` y `btn_rst` van en interruptores.
 
-| Función | Puerto y bits | Pin y recurso físico |
-|---|---|---|
-| Reloj | `clk` | W5, oscilador de 100 MHz |
-| Arriba, abajo, izquierda, derecha | `btn_arriba`, `btn_abajo`, `btn_izq`, `btn_der` | T18, U17, W19, T17 (btnU, btnD, btnL, btnR) |
-| Rotación | `btn_sel` | U18, btnC |
-| Confirmar | `btn_ok` | V17, SW0, acción al subirlo |
-| Nueva partida | `btn_rst` | R2, SW15, subir y volver a bajar |
-| UART RX y TX | `rx_i`, `tx_o` | B18 y A18, puente USB-UART |
-| VGA rojo, bits 0 a 3 | `vga_r_o` | G19, H19, J19, N19 |
-| VGA verde, bits 0 a 3 | `vga_g_o` | J17, H17, G17, D17 |
-| VGA azul, bits 0 a 3 | `vga_b_o` | N18, L18, K18, J18 |
-| Sincronismos | `vga_hsync_o`, `vga_vsync_o` | P19 y R19 |
-| Segmentos, bits 0 a 6 | `seg` | W7, W6, U8, V8, U5, V5, U7 |
-| Ánodos, bits 0 a 3 | `an` | U2, U4, V4, W4 |
-| Punto decimal | `dp` | V7 |
-| Colocación, batalla, resultado | `led[2:0]` | U16, E19, U19 (LD0, LD1, LD2) |
-| Buzzer | `buzzer` | P18, JC4 |
+- `clk`, el oscilador de 100 MHz, en W5.
+- `btn_arriba`, `btn_abajo`, `btn_izq` y `btn_der` en T18, U17, W19 y T17 (btnU, btnD, btnL y
+  btnR).
+- `btn_sel`, la rotación, en U18 (btnC).
+- `btn_ok`, confirmar, en V17. Es SW0 y actúa al subirlo.
+- `btn_rst`, nueva partida, en R2. Es SW15, se sube y se vuelve a bajar.
+- `rx_i` y `tx_o` en B18 y A18, el puente USB-UART.
+- `vga_r_o[3:0]` en G19, H19, J19 y N19.
+- `vga_g_o[3:0]` en J17, H17, G17 y D17.
+- `vga_b_o[3:0]` en N18, L18, K18 y J18.
+- `vga_hsync_o` y `vga_vsync_o` en P19 y R19.
+- `seg[6:0]` en W7, W6, U8, V8, U5, V5 y U7.
+- `an[3:0]` en U2, U4, V4 y W4, y el punto decimal `dp` en V7.
+- `led[2:0]` en U16, E19 y U19 (LD0, LD1 y LD2), para colocación, batalla y resultado.
+- `buzzer` en P18, que es JC4.
 
 El instructivo (4.5.4) llama `BTN_RST` al botón central. En este diseño el botón central rota el
-barco, porque la rotación se usa en cada colocación, y `BTN_RST` pasa a SW15. La función es la
-pedida: reinicia la partida en cualquier momento y conserva las ganadas.
+barco, porque la rotación se usa en cada colocación, y `BTN_RST` pasa a SW15. Hace lo que pide el
+instructivo, reinicia la partida en cualquier momento y conserva las ganadas.
 
 PROG es el reinicio general por reconfiguración. El bitstream se graba en la flash (`make flash`)
 y la tarjeta arranca de ella con el jumper JP1 en QSPI. El reset interno `rst` se libera después
@@ -474,8 +476,6 @@ de sincronizar `~locked` en `clk_sys`.
 
 Los pines de reloj, controles, indicadores, UART, VGA y JC4 se contrastaron con el archivo
 oficial de Digilent para Basys 3 rev. B [11]. Las 40 asignaciones físicas coinciden.
-
----
 
 ## 5. Descripción formal de interfaces de módulos
 
@@ -485,10 +485,9 @@ oficial de Digilent para Basys 3 rev. B [11]. Las 40 asignaciones físicas coinc
 `ARCHIVO_HEX` selecciona el archivo de programa. En síntesis se usa `sw/programa.hex`, y los
 testbenches ajustan la ruta al directorio desde el cual ejecutan `vvp`.
 
-| Módulo | Entradas | Salidas y relación |
-|---|---|---|
-| `top` | `clk`, siete controles locales, `rx_i` | `tx_o`, RGB y sincronismos VGA, `seg`, `an`, `dp`, `led[2:0]`, `buzzer` |
-| `generador_relojes` | `clk_i` | `clk_sys_o`, `clk_pix_o`, `locked_o` |
+- `top` recibe `clk`, los siete controles locales y `rx_i`, y saca `tx_o`, RGB y sincronismos del
+  VGA, `seg`, `an`, `dp`, `led[2:0]` y `buzzer`.
+- `generador_relojes` recibe `clk_i` y saca `clk_sys_o`, `clk_pix_o` y `locked_o`.
 
 El reset del sistema se sincroniza en dos flip-flops inicializados en uno. El periférico VGA
 sincroniza nuevamente `rst_i` al dominio de píxel antes de reiniciar sus contadores. Los pines
@@ -496,24 +495,24 @@ sincroniza nuevamente `rst_i` al dominio de píxel antes de reiniciar sus contad
 
 ### 5.2 `procesador_uniciclo`, ROM y RAM
 
-| Puerto del procesador | Dirección | Ancho | Función |
-|---|---|---:|---|
-| `clk_i`, `rst_i` | Entrada | 1 | Reloj y reset síncrono |
-| `ProgAddress_o` | Salida | 32 | Dirección de instrucción, PC en bytes |
-| `ProgIn_i` | Entrada | 32 | Instrucción combinacional de ROM |
-| `DataAddress_o` | Salida | 32 | Dirección de datos en bytes |
-| `DataOut_o` | Salida | 32 | Dato a escribir |
-| `DataIn_i` | Entrada | 32 | Dato elegido por el MUX de lectura |
-| `we_o` | Salida | 1 | Habilitación de escritura del procesador |
+Puertos del procesador
+
+- `clk_i` y `rst_i`, entradas de 1 bit, reloj y reset síncrono.
+- `ProgAddress_o`, salida de 32 bits, la dirección de instrucción (el PC en bytes).
+- `ProgIn_i`, entrada de 32 bits, la instrucción que devuelve la ROM en forma combinacional.
+- `DataAddress_o`, salida de 32 bits, la dirección de datos en bytes.
+- `DataOut_o`, salida de 32 bits, el dato a escribir.
+- `DataIn_i`, entrada de 32 bits, el dato que elige el MUX de lectura.
+- `we_o`, salida de 1 bit, la habilitación de escritura.
 
 `procesador_uniciclo` es un envoltorio de `riscv_core`. El banco, la ALU, el control y los
 inmediatos pertenecen al núcleo reutilizado. El vector de reset se fija en `0x0000_0000` y la
 extensión M permanece desactivada.
 
-| Memoria | Entradas | Salida | Organización |
-|---|---|---|---|
-| `rom` | `addr_i[31:0]` | `instr_o[31:0]` | 2048 × 32, lectura combinacional, carga con `$readmemh` |
-| `ram` | `clk_i`, `write_enable_i`, `addr_i[31:0]`, `wdata_i[31:0]` | `rdata_o[31:0]` | 1024 × 32, escritura al flanco y lectura combinacional |
+- `rom` recibe `addr_i[31:0]` y devuelve `instr_o[31:0]`. Es de 2048 × 32, lee en forma
+  combinacional y se carga con `$readmemh`.
+- `ram` recibe `clk_i`, `write_enable_i`, `addr_i[31:0]` y `wdata_i[31:0]`, y devuelve
+  `rdata_o[31:0]`. Es de 1024 × 32, escribe en el flanco y lee en forma combinacional.
 
 La ROM ignora los bits altos fuera de su índice y no detecta por sí misma un PC fuera del rango.
 Las palabras no suministradas por el `.hex` quedan sin inicializar en simulación. El programa
@@ -521,12 +520,12 @@ mantiene sus saltos dentro de la imagen válida.
 
 ### 5.3 `address_translator` y `mux_lectura`
 
-| Módulo | Entradas | Salidas |
-|---|---|---|
-| `address_translator` | `address_i[31:0]`, `write_enable_i` | `ram_we`, `uart_we`, `gpio_we`, `display_we`, `led_we`, `buzzer_we`, `vga_we`, `mux_sel[2:0]` |
-| `mux_lectura` | `mux_sel[2:0]`, siete buses `*_dout[31:0]` | `rdata_o[31:0]` hacia `DataIn_i` |
+- `address_translator` recibe `address_i[31:0]` y `write_enable_i`, y saca `ram_we`, `uart_we`,
+  `gpio_we`, `display_we`, `led_we`, `buzzer_we`, `vga_we` y `mux_sel[2:0]`.
+- `mux_lectura` recibe `mux_sel[2:0]` y los siete buses `*_dout[31:0]`, y entrega `rdata_o[31:0]`
+  a `DataIn_i`.
 
-**Mapa de direcciones y selección.**
+El mapa de direcciones y la selección de cada destino quedan así.
 
 | Destino | Dirección o ventana | `mux_sel` | Escritura |
 |---|---|---|---|
@@ -539,7 +538,8 @@ mantiene sus saltos dentro de la imagen válida.
 | VGA | `0x0001_1000` a `0x0001_17FF`, palabras alineadas | `110` | `vga_we = we` |
 | No asignada o no alineada | Resto | `111` | Todas en cero, lectura cero |
 
-**Tabla de control.** El vector se ordena como `{vga, buzzer, led, display, gpio, uart, ram}`.
+En la tabla de control, el vector de escritura va en el orden
+`{vga, buzzer, led, display, gpio, uart, ram}`.
 
 | Dirección seleccionada | `we=0`: vector de escritura | `we=1`: vector de escritura | Selección de lectura |
 |---|---|---|---|
@@ -553,59 +553,63 @@ mantiene sus saltos dentro de la imagen válida.
 | Inválida | `0000000` | `0000000` | `111` |
 
 La selección de lectura depende de la dirección y no de `we`. No existe `read_enable_i` en este
-bus de plataforma. Los periféricos de un solo registro reciben índice cero explícito: derivarlo
-de `DataAddress_o[3:2]` daría un índice incorrecto para el LED en `0x138`.
+bus de plataforma. Los periféricos de un solo registro reciben el índice cero fijo, porque
+sacarlo de `DataAddress_o[3:2]` daría un índice equivocado para el LED en `0x138`.
 
 ### 5.4 Interfaz común de periféricos
 
-| Señal | Dirección | Función |
-|---|---|---|
-| `clk_i` | Entrada | Reloj de sistema |
-| `rst_i` | Entrada | Reset síncrono |
-| `write_enable_i` | Entrada | Selección de escritura generada por el AT |
-| `addr_i` | Entrada | Índice de registro, 2 bits (el VGA usa 9) |
-| `wdata_i[31:0]` | Entrada | Datos del procesador |
-| `rdata_o[31:0]` | Salida | Lectura combinacional |
+- `clk_i`, entrada, el reloj de sistema.
+- `rst_i`, entrada, el reset síncrono.
+- `write_enable_i`, entrada, la habilitación de escritura que genera el AT.
+- `addr_i`, entrada, el índice de registro de 2 bits (el VGA usa 9).
+- `wdata_i[31:0]`, entrada, el dato del procesador.
+- `rdata_o[31:0]`, salida, la lectura combinacional.
 
-UART y VGA se desarrollan en las secciones 6 y 7. Los otros periféricos exponen:
+UART y VGA se desarrollan en las secciones 6 y 7. Los otros periféricos exponen estos registros.
 
-| Periférico | Campo | Acceso | Salida física y comportamiento |
-|---|---|---|---|
-| Entradas | bits 6:0: arriba, abajo, izquierda, derecha, selección, confirmar, reiniciar | RO | Valor registrado de los siete controles, bits altos en cero |
-| 7 segmentos | bits 15:0: cuatro nibbles BCD, 19:16: puntos | RW | `seg_o[6:0]`, `an_o[3:0]`, `dp_o`, activos en bajo |
-| LED | bits 2:0 | RW | `leds_o[2:0]`, sin decodificar, el programa escribe one-hot |
-| Buzzer | bits 2:0: código de sonido | RW, limpieza automática al terminar | `buzzer_o`, secuencia de notas |
+- Entradas, de solo lectura. Los bits 6:0 son arriba, abajo, izquierda, derecha, selección,
+  confirmar y reiniciar, con el valor registrado de cada control, y los bits altos van en cero.
+- 7 segmentos, de lectura y escritura. Los bits 15:0 son cuatro nibbles BCD y los 19:16 los puntos.
+  Maneja `seg_o[6:0]`, `an_o[3:0]` y `dp_o`, activos en bajo.
+- LED, de lectura y escritura, bits 2:0. Salen tal cual a `leds_o[2:0]` y el programa escribe
+  one-hot.
+- Buzzer, de lectura y escritura, con el código de sonido en los bits 2:0. Se limpia solo al
+  terminar la melodía, que sale por `buzzer_o`.
 
 Las direcciones internas 01, 10 y 11 de estos bloques devuelven cero. Las escrituras al
 periférico de entradas no modifican su estado.
 
 ### 5.5 Secuenciador, generador de tono, marcador y fuente
 
-| Módulo | Entradas principales | Salidas | Función |
-|---|---|---|---|
-| `secuenciador_melodia` | `clk`, `rst`, `i_iniciar`, `i_sonido[2:0]` | `o_n[17:0]`, `o_sonar`, `o_fin` | Nota, duración y fin de la melodía |
-| `generador_tono` | `clk`, `rst`, `i_n`, `i_sonar` | `o_sound` | Onda cuadrada de la nota |
-| `marcador` | `clk`, `rst`, `i_digitos[15:0]`, `i_puntos[3:0]` | `o_seg`, `o_an`, `o_dp` | Multiplexado y decodificación BCD |
-| `fuente_caracteres` | `codigo_i[5:0]`, `fila_i[2:0]` | `bits_o[4:0]` | Fila de un glifo 5 × 7 |
+- `secuenciador_melodia` recibe `clk`, `rst`, `i_iniciar` e `i_sonido[2:0]`, y saca `o_n[17:0]`,
+  `o_sonar` y `o_fin`. Lleva la nota, su duración y el fin de la melodía.
+- `generador_tono` recibe `clk`, `rst`, `i_n` e `i_sonar` y saca `o_sound`, la onda cuadrada de la
+  nota.
+- `marcador` recibe `clk`, `rst`, `i_digitos[15:0]` e `i_puntos[3:0]`, y saca `o_seg`, `o_an` y
+  `o_dp`. Multiplexa los dígitos y decodifica el BCD.
+- `fuente_caracteres` recibe `codigo_i[5:0]` y `fila_i[2:0]` y devuelve `bits_o[4:0]`, una fila de
+  un glifo de 5 × 7.
 
 El sonido escrito reinicia el secuenciador y puede reemplazar una melodía en curso. Los códigos
 0, 6 y 7 no producen una melodía. Los nibbles del display mayores que 9 apagan el dígito.
 
 ### 5.6 Programa y aplicación de PC
 
-El contrato del programa está expresado por las direcciones, los campos y el protocolo. Las
-subrutinas principales son:
+El contrato del programa son las direcciones, los campos y el protocolo. Las subrutinas
+principales son estas.
 
-| Rutina | Entradas y resultado | Responsabilidad |
-|---|---|---|
-| `LEER_BOTONES` | Devuelve flancos en `a0` | `actual & ~anterior` |
-| `UART_ATENDER` | Devuelve tipo, D1 y D2 en `a0` a `a2` | Consume hasta un byte y completa y valida la trama |
-| `VALIDAR_COLOCACION` | Jugador, id, fila, columna, orientación | Rechaza fuera del tablero y traslape |
-| `COLOCAR_BARCO` | Misma descripción ya validada | Escribe las casillas e id en RAM |
-| `PROCESAR_DISPARO` | Dueño del tablero, fila, columna | Impacto, agua, hundido o repetido |
-| `PINTAR_CASILLA` | Tablero y coordenadas | Escribe VGA ocultando barcos intactos de J2 |
-| `SUMAR_GANADA` | Ganador | Incrementa BCD y actualiza el display |
-| `NUEVA_PARTIDA` | Estado previo de ganadas | Limpia variables y reconstruye la vista conservando el marcador |
+- `LEER_BOTONES` devuelve en `a0` los flancos, calculados como `actual & ~anterior`.
+- `UART_ATENDER` consume hasta un byte, completa y valida la trama, y devuelve tipo, D1 y D2 en
+  `a0` a `a2`.
+- `VALIDAR_COLOCACION` recibe jugador, id, fila, columna y orientación, y rechaza lo que se sale del
+  tablero o se traslapa.
+- `COLOCAR_BARCO` recibe la misma descripción ya validada y escribe en RAM las casillas con su id.
+- `PROCESAR_DISPARO` recibe el dueño del tablero, la fila y la columna, y devuelve impacto, agua,
+  hundido o repetido.
+- `PINTAR_CASILLA` recibe tablero y coordenadas y escribe la casilla en el VGA, ocultando los barcos
+  intactos de J2.
+- `SUMAR_GANADA` recibe el ganador, incrementa el BCD y actualiza el display.
+- `NUEVA_PARTIDA` limpia las variables y reconstruye la vista, conservando el marcador.
 
 La estructura completa (organización en la ROM, convención de llamado, pila y ficha de cada
 subrutina) está en [`PROGRAMA.md`](../diseño/modulos/PROGRAMA.md).
@@ -615,8 +619,6 @@ La aplicación separa transporte (`enlace.py`), mensajes (`protocolo.py`), estad
 `batalla_pc.py` los coordina con `select`. Las flechas o `hjkl` mueven el cursor, `r` rota y Enter
 confirma. Los tableros se escalan al tamaño de la terminal. La aplicación depende de una terminal
 POSIX (Linux, macOS o WSL) por su uso de `termios` y del sondeo del descriptor serial [6].
-
----
 
 ## 6. Periférico VGA
 
@@ -653,7 +655,7 @@ $$
 ### 6.2 Ubicación de los tableros y mensajes
 
 Los tableros usan las filas de pantalla 4 a 11. J1 usa las columnas 1 a 8 y el estado conocido del
-tablero de J2 usa las columnas 11 a 18. Sus coordenadas gráficas se calculan como:
+tablero de J2 usa las columnas 11 a 18. En pantalla quedan en
 
 $$
 fila_{pantalla}=4+fila_{juego},\qquad
@@ -666,9 +668,9 @@ fila 13 muestra las ganadas. Las filas 0 y 14 quedan vacías para dar margen a m
 recortan el borde de la imagen.
 
 El cursor de colocación muestra el largo y la orientación del barco, y el de batalla marca una
-casilla rival. La rutina de pintado convierte un barco intacto de J2 en agua antes de escribir
-la memoria gráfica. Por ello, la privacidad se implementa en el programa y no en una paleta que
-reciba información secreta.
+casilla rival. La rutina de pintado convierte un barco intacto de J2 en agua antes de escribir la
+memoria gráfica. Así la privacidad depende solo del programa, y al periférico nunca le llega el
+tablero secreto.
 
 ### 6.3 Barrido y alineación de señales
 
@@ -698,8 +700,8 @@ resto. Dos bordes de casillas adyacentes forman una línea de dos píxeles.
 El procesador escribe con `clk_sys` y el barrido lee y registra con `clk_pix`. La memoria se
 describe con un puerto de escritura y dos caminos de lectura, y yosys la arma con 128 primitivas
 `RAM128X1D`, que traen justo un puerto de lectura y escritura y uno de solo lectura. No se borran
-las palabras por reset, para conservar una implementación de memoria distribuida: la
-configuración de la FPGA las deja en cero y el programa construye la pantalla de la partida.
+las palabras por reset, para que siga siendo memoria distribuida. La configuración de la FPGA las
+deja en cero y el programa arma la pantalla de la partida.
 
 La memoria es el único punto de cruce de datos entre dominios y los dos relojes salen del mismo
 VCO. Si el barrido lee una casilla en el mismo instante en que el CPU la escribe, esa casilla puede
@@ -719,8 +721,6 @@ Este ejemplo pinta la casilla (0,0) del tablero de J1 como impacto con borde. El
 la información gráfica y vuelve al lazo. El periférico sigue generando el video sin que la CPU
 tenga que temporizar cada píxel.
 
----
-
 ## 7. Periférico UART y protocolo de aplicación
 
 ### 7.1 Mapa de registros
@@ -732,11 +732,11 @@ tenga que temporizar cada píxel.
 | `0x0001_0048` | `10` | DATOS_RX | Último byte en bits 7:0, RW con prioridad de recepción |
 | Sin dirección externa asignada | `11` | No utilizado | Lectura cero |
 
-`send` es una orden sostenida: escribir uno inicia una transmisión y el periférico la limpia
-cuando el núcleo indica el fin. Escribir cero no cancela la transmisión en curso. Esto resuelve la
-ventana de rearme en la que el transmisor puede perder pulsos cortos. `new_rx` se activa al
-recibir un byte y el programa lo limpia mediante una escritura al control. Una recepción
-concurrente tiene prioridad sobre esa escritura.
+`send` es una orden sostenida. Escribir un uno inicia una transmisión, y el periférico lo limpia
+cuando el núcleo avisa que terminó. Escribir cero no cancela la transmisión en curso. Esto resuelve
+la ventana de rearme en la que el transmisor puede perder pulsos cortos. `new_rx` se activa al
+recibir un byte y el programa lo limpia mediante una escritura al control. Una recepción concurrente
+tiene prioridad sobre esa escritura.
 
 La UART solo guarda un byte RX. No tiene FIFO, registro de overrun ni cola de eventos. Un segundo
 byte puede reemplazar al anterior si el programa aún no lo consumió. Por eso el tiempo entre bytes
@@ -744,7 +744,7 @@ forma parte del contrato de transporte (sección 7.3).
 
 ### 7.2 Formato de mensajes de aplicación
 
-Todas las tramas contienen cinco bytes:
+Todas las tramas tienen cinco bytes,
 
 $$
 [\,0xAA,\ TIPO,\ D1,\ D2,\ TIPO\oplus D1\oplus D2\,]
@@ -752,7 +752,7 @@ $$
 
 | Dirección | Tipo | Nombre | D1 | D2 |
 |---|---|---|---|---|
-| PC → FPGA | `10` | Colocar | bit 7: vertical, bits 1:0: id 0 a 2 | Fila en nibble alto, columna en bajo |
+| PC → FPGA | `10` | Colocar | Bit 7 en uno si es vertical, id 0 a 2 en los bits 1:0 | Fila en nibble alto, columna en bajo |
 | PC → FPGA | `11` | Disparo | Fila en nibble alto, columna en bajo | Cero |
 | FPGA → PC | `20` | Estado | Subtipo | Dato del subtipo |
 | FPGA → PC | `21` | Resultado de colocación | Id del barco | Código de colocación |
@@ -832,13 +832,11 @@ No se transmite el tablero secreto de J1. La PC conserva su propio tablero a par
 colocaciones confirmadas y el tablero rival a partir de los resultados de sus disparos. El chequeo
 XOR detecta los errores de un bit y muchas corrupciones, pero no reemplaza un CRC.
 
----
-
 ## 8. Diagramas de estado
 
 ### 8.1 Fases del programa de juego
 
-El diagrama representa estados del software, no una FSM principal implementada en HDL.
+Estos estados son del programa en ensamblador. En el HDL no hay una FSM principal del juego.
 
 ```mermaid
 stateDiagram-v2
@@ -872,8 +870,9 @@ stateDiagram-v2
     Fallo --> Fallo: Repetido, no consume turno
 ```
 
-El hundimiento no es un quinto estado de casilla. Se detecta cuando el número de impactos del id
-llega a su longitud. El evento incrementa los hundidos del tirador y el tercero produce la victoria.
+Hundido no aparece como estado de casilla. El programa lo detecta cuando el número de impactos del
+id llega a su longitud. El evento incrementa los hundidos del tirador y el tercero produce la
+victoria.
 
 ### 8.3 Máquinas de estado UART de bajo nivel
 
@@ -906,8 +905,6 @@ escritura vuelve al paso cero. Si la duración es cero se considera terminada, y
 el paso avanza al completar su duración. El generador de tono cuenta y conmuta mientras
 `o_sonar` permanezca activo.
 
----
-
 ## 9. Estrategia de validación
 
 La validación se divide en pruebas de instrucciones, memorias y bus, periféricos, protocolo y PC,
@@ -930,7 +927,7 @@ criterio automático de pase.
 | Post-implementación | `tb_top_temporizado` sobre el netlist de Vivado con SDF, en xsim | Programa, colocación y disparos correctos, sin violaciones de setup ni de hold |
 | Tarjeta | Partidas completas en la Basys 3 | Controles, enlace, imagen, sonidos, displays y LED correctos |
 
-**Reproducción, desde la raíz del repositorio:**
+Todo se reproduce desde la raíz del repositorio con estos comandos.
 
 ```sh
 make test-app    # pruebas de la app de PC
@@ -944,7 +941,7 @@ make bitstream   # síntesis, colocación y ruteo con openXC7
 make flash       # graba el bitstream en la flash de la Basys 3
 ```
 
-Herramientas: Icarus Verilog 13.0, yosys 0.69 y nextpnr-xilinx del toolchain openXC7,
+Se usaron Icarus Verilog 13.0, yosys 0.69 y nextpnr-xilinx del toolchain openXC7,
 openFPGALoader, binutils de GNU para RISC-V, Python 3 con `pyserial` y Verilator 5.020 como
 linter. La simulación post-implementación usa Vivado 2026.1 y xsim. Los testbenches usan
 `return` dentro de tasks y literales de arreglo `'{...}`, que Icarus 12 no acepta, por eso el
@@ -954,12 +951,10 @@ README fija la versión 13.
 antes de `hierarchy -check`, para que la síntesis genérica reconozca el `PLLE2_BASE` y los `BUFG`
 sin sintetizar su contenido. `make bitstream` usa `synth_xilinx`, que las carga por su cuenta.
 
-**Casos fuera del escenario del top.** Victoria de J1, colocaciones verticales en ambos bordes,
-disparos repetidos de ambos jugadores, rollover BCD 09 → 10 y 99 → 00, y mensajes corruptos o
-perdidos. Parte de ellos se cubre en los bancos de módulo (por ejemplo, el display y la UART) y
-el resto se comprobó jugando en la tarjeta.
-
----
+El escenario del top deja afuera la victoria de J1, las colocaciones verticales en los bordes,
+los disparos repetidos de los dos jugadores, el paso del BCD de 09 a 10 y de 99 a 00, y los
+mensajes corruptos o perdidos. Algunos los cubren los bancos de módulo, como los del display y la
+UART, y el resto se comprobó jugando en la tarjeta.
 
 ## 10. Resultados
 
@@ -984,9 +979,9 @@ el resto se comprobó jugando en la tarjeta.
 | `tb_uart_tx` | 18 | Pasa |
 | Aplicación de PC | 18 pruebas unitarias | Pasa |
 
-Las cantidades corresponden a unidades de verificación distintas: una prueba ISA incluye varios
-casos, el banco del VGA compara cada píxel de cuadros completos y el banco de bus reporta un pase
-global. No se suman como si fueran una métrica homogénea de cobertura.
+Cada banco cuenta distinto. Una prueba ISA incluye varios casos, el banco del VGA compara cada
+píxel de cuadros completos y el de bus da un solo pase global, así que las cantidades no se pueden
+sumar como si fueran una medida de cobertura.
 
 ### 10.2 Programa, imagen ROM y escenario de integración
 
@@ -996,23 +991,21 @@ palabra por palabra, a `sw/programa.hex`. Quedan 784 posiciones disponibles, equ
 
 El banco del top inicia con el reset del PLL, recibe la notificación de colocación y verifica
 tableros, borde, títulos, letras, números y marcador. Coloca barcos válidos de ambos jugadores,
-repite un id remoto y rechaza un traslape local. Después juega 18 disparos: nueve de J1 a agua y
+repite un id remoto y rechaza un traslape local. Después juega 18 disparos, nueve de J1 al agua y
 nueve de J2 contra las nueve casillas de la flota de J1.
 
-| Punto del escenario | Resultado comprobado |
-|---|---|
-| Arranque | Fase colocación, LED `001`, ganadas `00 00` |
-| Barco remoto guardado | Presente en RAM y oculto en VGA |
-| Colocación local traslapada | No incrementa colocados y solicita el sonido de inválida |
-| Ambas flotas completas | Estado batalla y primer turno de J1 |
-| Disparos válidos | Alternan turno y generan las respuestas seriales esperadas |
-| Fin | Gana J2, disparos `9 / 9`, hundidos `0 / 3` |
-| Marcador | J2 pasa a `01` en el HUD y en el display |
-| BTN_RST | Nueva colocación conservando `00 01` |
+- Al arrancar queda en fase de colocación, con el LED en `001` y las ganadas en `00 00`.
+- El barco remoto queda guardado en RAM y no aparece en el VGA.
+- La colocación local traslapada no incrementa los colocados y pide el sonido de inválida.
+- Con las dos flotas completas pasa a batalla, con el primer turno para J1.
+- Los disparos válidos alternan el turno y generan las respuestas seriales esperadas.
+- Al final gana J2, con disparos `9 / 9` y hundidos `0 / 3`.
+- Las ganadas de J2 suben a `01` en el HUD y en el display.
+- `BTN_RST` vuelve a la colocación y conserva el `00 01`.
 
 ### 10.3 Evidencia de simulación
 
-Extractos de la salida de `make test`:
+Estos son extractos de la salida de `make test`.
 
 ```text
 PASS AT + MUX: 266148 checks
@@ -1049,27 +1042,31 @@ OK
 
 ### 10.4 Uso de recursos
 
-**Síntesis genérica (`make synth`).** Termina sin errores. El log de yosys no tiene ningún
+La síntesis genérica (`make synth`) termina sin errores. El log de yosys no tiene ningún
 `Latch inferred`, y `proc` reporta 570 señales combinacionales revisadas sin latch. El netlist tiene
 10 memorias (`$mem_v2`), un `PLLE2_BASE` y dos `BUFG`, y ninguna celda de latch.
 
-**Linter (`make lint`).** `verilator --lint-only -Wall` sobre el top no da ningún aviso de latch
+El linter (`make lint`, `verilator --lint-only -Wall` sobre el top) no da ningún aviso de latch
 (`LATCH`), de asignación con retardo en lógica combinacional (`COMBDLY`) ni de señal con más de un
-driver (`MULTIDRIVEN`). Los 23 avisos que da son de estilo, revisados uno por uno:
+driver (`MULTIDRIVEN`). Da 23 avisos de estilo, y se revisaron uno por uno.
 
-| Aviso | Cantidad | Qué es |
-|---|---:|---|
-| `WIDTHEXPAND` | 8 | En `periferico_vga.sv` los contadores de 10 bits se comparan con constantes enteras de 32. Verilator extiende con ceros, que es lo correcto |
-| `UNUSEDSIGNAL` | 11 | Bits de `wdata_i` y `addr_i` que un periférico o una memoria no usa (el periférico de entradas no usa `write_enable_i` ni `wdata_i`, porque es de solo lectura), y señales del núcleo reutilizado que la plataforma no conecta: las habilitaciones por byte y de lectura, el reloj de `data_memory_interface` y bits de `funct7` que el control no necesita |
-| `UNUSEDPARAM` | 2 | Constantes de documentación (`COLUMNAS` del VGA y `SILENCIO` del secuenciador) |
-| `DECLFILENAME` | 1 | `generador_tono.sv` incluye el módulo auxiliar `contador_limpiable` |
-| `PINCONNECTEMPTY` | 1 | `prueba_vga.sv`, el top de prueba del VGA, deja `rdata_o` sin conectar |
+- 8 `WIDTHEXPAND`. En `periferico_vga.sv` los contadores de 10 bits se comparan con constantes
+  enteras de 32, y Verilator extiende con ceros, que es lo correcto.
+- 11 `UNUSEDSIGNAL`. Son bits de `wdata_i` y `addr_i` que algún periférico o memoria no usa (el de
+  entradas tampoco usa `write_enable_i` ni `wdata_i`, porque es de solo lectura), y señales del
+  núcleo reutilizado que la plataforma no conecta, como las habilitaciones por byte y de lectura,
+  el reloj de `data_memory_interface` y bits de `funct7` que el control no necesita.
+- 2 `UNUSEDPARAM`, constantes que están solo como documentación (`COLUMNAS` del VGA y `SILENCIO`
+  del secuenciador).
+- 1 `DECLFILENAME`, porque `generador_tono.sv` incluye el módulo auxiliar `contador_limpiable`.
+- 1 `PINCONNECTEMPTY`, en `prueba_vga.sv`, el top de prueba del VGA, que deja `rdata_o` sin
+  conectar.
 
 Verilator no conoce `PLLE2_BASE` ni `BUFG`, así que revisa `generador_relojes` con su modelo de
 simulación, que es la parte del diseño que no llega a la FPGA.
 
-**Implementación (`make bitstream`, nextpnr-xilinx).** Utilización del XC7A35T después de colocar
-y rutear:
+Esta es la utilización del XC7A35T que reporta nextpnr-xilinx (`make bitstream`) después de
+colocar y rutear.
 
 | Recurso | Usado | Disponible en el XC7A35T | Porcentaje |
 |---|---:|---:|---:|
@@ -1082,25 +1079,26 @@ y rutear:
 | Pines de E/S | 40 | 106 | 37,7 % |
 
 nextpnr-xilinx reporta los porcentajes contra el die del XC7A50T (65 200 LUT), que comparte
-encapsulado con el 35T. La tabla los recalcula contra la capacidad real del XC7A35T. Las memorias
-ocupan una parte importante de las LUT: solo la memoria de video son 128 `RAM128X1D`, equivalentes a
-512 LUT, y la ROM de 8 KiB se arma como lógica porque es constante. No se usa BRAM, por la decisión D4.
-La cantidad baja de flip-flops es esperable: el banco de registros y las memorias están en LUTRAM.
+encapsulado con el 35T, y la tabla los recalcula contra la capacidad real del XC7A35T.
+
+Buena parte de las LUT se van en memorias. Solo la memoria de video son 128 `RAM128X1D`, unas
+512 LUT, y la ROM de 8 KiB se arma como lógica porque es constante. No hay BRAM por la decisión D4,
+y hay tan pocos flip-flops porque el banco de registros y las memorias están en LUTRAM.
 
 ### 10.5 Análisis de *timing*
 
-Frecuencias máximas reportadas por nextpnr-xilinx después del ruteo:
+Estas son las frecuencias máximas que reporta nextpnr-xilinx después del ruteo.
 
 | Reloj | Frecuencia de operación | Período | Frecuencia máxima | Período mínimo | Holgura |
 |---|---:|---:|---:|---:|---:|
 | `clk_sys` | 33,33 MHz | 30,0 ns | 37,92 MHz | 26,37 ns | 3,63 ns |
 | `clk_pix` | 25 MHz | 40,0 ns | 85,46 MHz | 11,70 ns | 28,30 ns |
 
-El camino crítico de `clk_sys` es el de un branch: arranca en el registro del PC (`prog_address`),
-pasa por la ROM, la lectura del banco de registros y la comparación de la ALU, y vuelve al PC por
-`next_pc`. Son 2,90 ns de lógica y 23,30 ns de ruteo: el 88 % del período mínimo es ruteo, por la
-cantidad de LUT que ocupan las memorias combinacionales y el recorrido entre ellas. La estimación
-antes de rutear era de 35,90 MHz.
+El camino crítico de `clk_sys` es el de un branch. Arranca en el registro del PC
+(`prog_address`), pasa por la ROM, la lectura del banco de registros y la comparación de la ALU, y
+vuelve al PC por `next_pc`. Tiene 2,90 ns de lógica y 23,30 ns de ruteo, o sea que el 88 % del
+período mínimo se va en ruteo, por la cantidad de LUT que ocupan las memorias combinacionales y la
+distancia entre ellas. Antes de rutear, la estimación era de 35,90 MHz.
 
 La frecuencia máxima cambia entre versiones del diseño, porque cada cambio en el RTL o en el
 programa mueve la colocación. Con versiones anteriores, `clk_sys` dio entre 39 y 50 MHz, y con la
@@ -1118,30 +1116,32 @@ Jugador 1, con los botones y el monitor VGA, y el Jugador 2, con la aplicación 
 demostración está en el
 [video de comprobación](https://estudianteccr-my.sharepoint.com/personal/mcoghi_estudiantec_cr/_layouts/15/stream.aspx?id=%2Fpersonal%2Fmcoghi%5Festudiantec%5Fcr%2FDocuments%2FITCR%2F2026%2FSemestre%20II%2FTaller%20de%20dise%C3%B1o%20digital%2Fvideo%5Fcomprobacion%2DGR01%2Emp4&nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&ga=1&referrer=StreamWebApp%2EWeb&referrerScenario=AddressBarCopied%2Eview%2Ee62e6088%2D6583%2D4563%2D90d1%2D1f4e5d9ba631).
 
-| Evidencia | Qué se comprobó | Resultado |
-|---|---|---|
-| Prueba del VGA sin procesador (`prueba_vga.sv`) | PLL, barrido, escritura y grid | Imagen estable, patrón esperado |
-| Colocación concurrente | Cada jugador coloca sin bloquear al otro, el VGA no muestra la flota de J2 | Correcto |
-| Batalla | Cursor sobre el tablero rival, impactos, fallos, hundidos y alternancia de turnos | Correcto |
-| Fin de partida y BTN_RST | Ganador en VGA y PC, resumen por UART, ganadas conservadas | Correcto |
-| Displays y LED | Ganadas de cada jugador y fase activa | Correcto |
-| Buzzer | Cinco sonidos distintos | Correcto |
-| Reinicio general con PROG | Recarga desde la flash en unos 0,5 s y ganadas en 00 00 | Correcto |
+- La prueba del VGA sin procesador (`prueba_vga.sv`) dio una imagen estable con el patrón
+  esperado, lo que confirmó el PLL, el barrido, la escritura y la cuadrícula.
+- En la colocación, cada jugador coloca sin bloquear al otro y el VGA no muestra la flota de J2.
+- En la batalla funcionan el cursor sobre el tablero rival, los impactos, fallos y hundidos, y la
+  alternancia de turnos.
+- Al terminar la partida, el ganador aparece en el VGA y en la PC, llega el resumen por UART, y
+  `BTN_RST` empieza otra partida conservando las ganadas.
+- Los displays muestran las ganadas de cada jugador y el LED la fase activa.
+- El buzzer toca los cinco sonidos distintos.
+- PROG recarga el diseño desde la flash en unos 0,5 s y deja las ganadas en 00 00.
 
 ### 10.7 Simulación post-implementación temporizada
 
 El instructivo pide una simulación post-implementación temporizada del sistema que cubra al menos
 la ejecución de un fragmento representativo del programa y la validación de un disparo. Los bancos
 de la sección 10.1 son RTL y usan el modelo conductual del PLL, sin retardos de celdas ni de ruteo.
-Con el flujo abierto openXC7 no se puede hacer en la forma estricta: nextpnr-xilinx sí escribe un
+Con el flujo abierto openXC7 no se puede hacer al pie de la letra. nextpnr-xilinx sí escribe un
 SDF con los retardos del diseño ruteado (`--sdf`), pero ese archivo describe sus celdas internas
 (`SLICE_LUTX`, `SLICE_FFX`, `SELMUX2_1`), que no tienen modelo de simulación, y no hay un netlist
 simulable sobre el cual anotarlo. Por eso para esta simulación se usó Vivado 2026.1:
 implementación, netlist temporizado (`write_verilog -mode timesim` y `write_sdf`) y simulación con
 xsim. Todo el flujo corre con `make sim-post` (script `src/fpga/vivado_timesim.tcl`).
 
-**Implementación.** `synth_design`, `opt_design`, `place_design` y `route_design` para el
-xc7a35tcpg236-1 con `src/fpga/basys3.xdc` y la ROM cargada con el `programa.hex` real:
+Vivado corre `synth_design`, `opt_design`, `place_design` y `route_design` para el
+xc7a35tcpg236-1 con `src/fpga/basys3.xdc`, con la ROM cargada con el `programa.hex` real. El
+resultado de la implementación es este.
 
 | Métrica | Valor |
 |---|---|
@@ -1154,49 +1154,50 @@ xc7a35tcpg236-1 con `src/fpga/basys3.xdc` y la ROM cargada con el `programa.hex`
 | BRAM | 0 |
 | Resultado | *All user specified timing constraints are met* |
 
-El camino crítico de `clk_sys` es del mismo tipo que el que reporta nextpnr-xilinx en la sección
-10.5: arranca en el registro del PC (`program_counter/value_reg[3]`) y cruza la ROM, la
-decodificación y la ALU. En Vivado termina en una escritura del banco de registros y en nextpnr en
-el PC. Son 24,6 ns con 18 niveles de lógica, y el 84 % es ruteo.
+El camino crítico de `clk_sys` se parece al que reporta nextpnr-xilinx en la sección 10.5. Arranca
+en el registro del PC (`program_counter/value_reg[3]`) y cruza la ROM, la decodificación y la ALU,
+pero en Vivado termina en una escritura del banco de registros y en nextpnr en el PC. Son 24,6 ns
+con 18 niveles de lógica, y el 84 % es ruteo.
 
-**Testbench.** `tb_top` no sirve sobre el netlist: lee la RAM (`dut.u_ram.mem`) y la memoria de video,
-y después de implementar esas memorias quedan repartidas en primitivas LUTRAM sin esos nombres. Por
-eso se escribió `src/sim/tb_top_temporizado.sv`, que solo usa los pines del `top` y los cables que
+`tb_top` no sirve sobre el netlist. Lee la RAM (`dut.u_ram.mem`) y la memoria de video, y después
+de implementar esas memorias quedan repartidas en primitivas LUTRAM con otros nombres. Por eso se
+escribió `src/sim/tb_top_temporizado.sv`, que solo usa los pines del `top` y los cables que
 conservan su nombre en el netlist (`rst`, `clk_sys`, `prog_address`, `prog_in`, `buzzer_dout`). Hace
-de Jugador 1 con los botones y de aplicación de PC por la UART, igual que `tb_top`, y verifica:
+de Jugador 1 con los botones y de aplicación de PC por la UART, igual que `tb_top`, y revisa cuatro
+cosas.
 
-1. **Fragmento del programa.** En cada flanco de `clk_sys` después del reinicio compara la
-   instrucción que sale de la ROM con `programa.hex` en la dirección del PC, y revisa que el PC
-   siguiente salga de esa instrucción: PC + 4, el destino de un `jal` o una de las dos salidas de un
-   branch (`jalr` no se revisa porque su destino depende de un registro). Con los retardos del
-   netlist, esto confirma que la ROM y la lógica del PC se estabilizan dentro del ciclo. Imprime
-   las primeras 12 instrucciones.
-2. **Arranque.** La primera trama `Estado` de colocación, el LED en `001` y los displays en `00 00`.
-3. **Colocación.** El Jugador 1 coloca su flota con los botones (filas 0, 1 y 2) y el Jugador 2 por
-   la UART (filas 0, 2 y 4). Con el último barco llegan las tramas de inicio de batalla y del turno
-   del Jugador 1, y el LED pasa a `010`.
-4. **Validación de disparos.** El Jugador 1 dispara en (0,0), donde está el barco 0 del Jugador 2:
-   la respuesta es impacto, el registro del buzzer queda en el sonido de impacto y el turno pasa al
-   Jugador 2. El Jugador 2 dispara en (5,5), que es agua: la respuesta es fallo, suena el fallo y
-   el turno vuelve al Jugador 1.
+1. El fragmento del programa. En cada flanco de `clk_sys` después del reinicio compara la
+   instrucción que sale de la ROM con `programa.hex` en la dirección del PC. También revisa que el
+   PC siguiente salga de esa instrucción, sea PC + 4, el destino de un `jal` o una de las dos
+   salidas de un branch (`jalr` no se revisa porque su destino depende de un registro). Con los
+   retardos del netlist, eso confirma que la ROM y la lógica del PC se estabilizan dentro del
+   ciclo. Las primeras 12 instrucciones se imprimen.
+2. El arranque, con la primera trama `Estado` de colocación, el LED en `001` y los displays en
+   `00 00`.
+3. La colocación. El Jugador 1 pone su flota con los botones en las filas 0, 1 y 2, y el Jugador 2
+   por la UART en las filas 0, 2 y 4. Con el último barco llegan las tramas de inicio de batalla y
+   de turno del Jugador 1, y el LED pasa a `010`.
+4. Un disparo de cada jugador. El Jugador 1 dispara en (0,0), donde está el barco 0 del Jugador 2,
+   y la respuesta es impacto, con el sonido de impacto en el registro del buzzer y el turno para el
+   Jugador 2. El Jugador 2 dispara al agua en (5,5), la respuesta es fallo, suena el fallo y el
+   turno vuelve al Jugador 1.
 
 La misma prueba corre sobre el RTL con `make sim TB=top_temporizado`, en unos 20 s, como referencia.
 
-**UART más rápida.** Sobre el netlist con retardos, xsim avanza unos 0,86 µs simulados por segundo.
-A 115 200 baudios cada trama de 5 bytes dura 434 µs, y el escenario completo necesitaba 10,5 ms
-simulados: más de tres horas por corrida. Por eso la velocidad de la UART se volvió un parámetro
+Sobre el netlist con retardos, xsim avanza unos 0,86 µs simulados por segundo. A 115 200 baudios
+cada trama de 5 bytes dura 434 µs, y el escenario completo necesitaba 10,5 ms simulados, más de tres
+horas por corrida. Por eso la velocidad de la UART se volvió un parámetro
 del `top` (`BAUDIOS`, 115 200 por defecto) y esta implementación se hizo con
 `-generic BAUDIOS=694444`. A 33,33 MHz eso da `TICKS_BIT = 48` y `TICKS_X16 = 3`, y como 16 × 3 = 48
 el receptor muestrea sin error acumulado. El bitstream de la tarjeta se genera siempre con 115 200.
 La única diferencia entre los dos netlists es la constante de los contadores de bit de la UART, y el
 procesador, la ROM, la RAM, el AT y los periféricos son los mismos. El testbench también acorta las
-pulsaciones a 150 µs: alcanza, porque la vuelta más larga del lazo del programa, un repintado del
-tablero, dura unos 100 µs.
+pulsaciones a 150 µs, que alcanzan porque la vuelta más larga del lazo del programa, un repintado
+del tablero, dura unos 100 µs.
 
-**Resultado.** Simulación de 3,25 ms del sistema completo con los retardos post-ruteo (SDF). La
-simulación tardó 53 minutos, y 58 con la implementación y la compilación. Esta es la salida del
-testbench; el log completo de xsim está en
-[`evidencia/sim_post_xsim.log`](evidencia/sim_post_xsim.log):
+Se simularon 3,25 ms del sistema completo con los retardos post-ruteo (SDF). La simulación tardó
+53 minutos, y 58 con la implementación y la compilación. Esta es la salida del testbench, y el log
+completo de xsim está en [`evidencia/sim_post_xsim.log`](evidencia/sim_post_xsim.log).
 
 ```text
 ok el sistema arranca en reinicio mientras el PLL no engancha
@@ -1234,17 +1235,18 @@ ok las 108266 instrucciones ejecutadas salen de la ROM y siguen el flujo del pro
 19 pruebas, 0 fallos
 ```
 
-xsim no reportó ninguna violación de setup ni de hold en toda la corrida. A diferencia del
-Proyecto 2, el reinicio no entra de un pin: sale de `~locked` del PLL pasado por dos flip-flops en
-`clk_sys` (sección 5.1), así que ya llega sincronizado.
+xsim no reportó ninguna violación de setup ni de hold en toda la corrida. En el Proyecto 2 sí hubo
+violaciones al soltar el reset, que entraba directo de un pin. Aquí sale de `~locked` del PLL
+pasado por dos flip-flops en `clk_sys` (sección 5.1), así que ya llega sincronizado.
 
-La traza es el arranque del programa (`INICIO`): tres `lui` cargan las bases de periféricos, video
-y RAM (`s0`, `s1`, `s2`), tres `sw` ponen en cero las ganadas, los displays y el control de la UART,
-un `lui` deja la pila en `0x3000`, y el `jal` en `0x001c` salta a `NUEVA_PARTIDA` en `0x1364`,
-donde `addi sp, sp, -4` y `sw ra, 0(sp)` guardan la dirección de retorno. Los bits `[1:0]` de
-`prog_in` quedan sin driver en el netlist: todas las instrucciones rv32i terminan en `11`, y Vivado
-deja esos dos bits como constante dentro de la ROM (2048 × 31 en el reporte de síntesis). La prueba
-compara los bits `[31:2]`.
+La traza es el arranque del programa (`INICIO`). Tres `lui` cargan las bases de periféricos, video
+y RAM (`s0`, `s1`, `s2`), tres `sw` ponen en cero las ganadas, los displays y el control de la
+UART, un `lui` deja la pila en `0x3000`, y el `jal` en `0x001c` salta a `NUEVA_PARTIDA` en
+`0x1364`, donde `addi sp, sp, -4` y `sw ra, 0(sp)` guardan la dirección de retorno.
+
+Los bits `[1:0]` de `prog_in` quedan sin driver en el netlist. Todas las instrucciones rv32i
+terminan en `11`, y Vivado deja esos dos bits como constante dentro de la ROM (2048 × 31 en el
+reporte de síntesis), así que la prueba compara los bits `[31:2]`.
 
 La primera figura muestra la salida del reinicio en la simulación temporizada. `rst` baja a los
 611 ns, cuando el PLL ya enganchó y los dos flip-flops de sincronización pasaron `locked`. Después
@@ -1257,33 +1259,32 @@ lejos de los 30 ns del período. En una simulación RTL el cambio sería instant
 
 La segunda figura muestra el disparo del Jugador 1. Mientras `BTN_OK` está en alto, el programa lee
 el botón en la vuelta siguiente del lazo, valida el disparo contra el tablero del Jugador 2 y a los
-7 µs empieza a enviar por `tx` la trama de disparo recibido (`AA 23 00 00 23`: casilla (0,0),
-resultado impacto). Le sigue la trama de estado con el turno del Jugador 2 (`AA 20 02 01 23`).
-Cada byte dura 14,4 µs a 694 444 baudios. El LED se mantiene en `010`, fase de batalla.
+7 µs empieza a enviar por `tx` la trama de disparo recibido (`AA 23 00 00 23`, casilla (0,0) e
+impacto). Le sigue la trama de estado con el turno del Jugador 2 (`AA 20 02 01 23`). Cada byte dura
+14,4 µs a 694 444 baudios. El LED se mantiene en `010`, fase de batalla.
 
 ![Simulación post-implementación: disparo del Jugador 1 en (0,0)](img/timesim_disparo.svg)
 
-**Modelo de retardo.** xelab usa el modelo inercial, el que tiene por defecto: un pulso más corto que
-el retardo de una celda no se propaga. La primera corrida usó `-transport_int_delays -pulse_r 0`, que
-deja pasar cada glitch. La ROM es un árbol de LUT y `MUXF7`/`MUXF8`, y cuando cambian varios bits del
-PC a la vez sus salidas pasan por valores intermedios. Sin `-pulse_e 0`, esos pulsos se marcaban como
-`X`, que llegaban a la instrucción y de ahí al PC. Con `-pulse_e 0` desaparecen las `X`, pero la
-simulación va tres veces más lenta que con el modelo inercial.
+xelab simula con el modelo de retardo inercial, el que trae por defecto, en el que un pulso más
+corto que el retardo de una celda no se propaga. La primera corrida usó
+`-transport_int_delays -pulse_r 0`, que deja pasar cada glitch. La ROM es un árbol de LUT y
+`MUXF7`/`MUXF8`, y cuando cambian varios bits del PC a la vez sus salidas pasan por valores
+intermedios. Sin `-pulse_e 0` esos pulsos salían como `X`, que llegaban a la instrucción y de ahí
+al PC. Con `-pulse_e 0` desaparecen, pero la simulación va tres veces más lenta que con el modelo
+inercial.
 
-**Cómo reproducirla:**
+Para reproducirla hay dos comandos.
 
 ```sh
 make sim-post                     # implementación con Vivado y simulación con xsim, cerca de una hora
 make sim TB=top_temporizado       # la misma prueba sobre el RTL
 ```
 
-El Makefile toma Vivado de `XILINX_VIVADO=/opt/Xilinx/2026.1/Vivado` (se puede cambiar en la línea de
-comandos) y deja el netlist, el SDF, los reportes de timing y de uso, el log de xsim y la onda
-`tb_top_temporizado.vcd` en `src/build/timesim/`. En Ubuntu y derivadas, el compilador que trae
-xsim no encuentra `crti.o` y `xelab` falla con `[XSIM 43-3238] Failed to link the design`. El
-Makefile lo evita pasando `LIBRARY_PATH=/usr/lib/x86_64-linux-gnu`.
-
----
+El Makefile toma Vivado de `XILINX_VIVADO=/opt/Xilinx/2026.1/Vivado` (se puede cambiar en la línea
+de comandos) y deja el netlist, el SDF, los reportes de timing y de uso, el log de xsim y la onda
+`tb_top_temporizado.vcd` en `src/build/timesim/`. En Ubuntu y derivadas, el compilador que trae xsim
+no encuentra `crti.o` y `xelab` falla con `[XSIM 43-3238] Failed to link the design`. El Makefile lo
+evita pasando `LIBRARY_PATH=/usr/lib/x86_64-linux-gnu`.
 
 ## 11. Análisis de resultados
 
@@ -1303,54 +1304,74 @@ frecuencia vertical teórica es 59,52 Hz y la latencia gráfica es de dos ciclos
 de la arquitectura implementada. En la tarjeta la imagen fue estable en el monitor.
 
 El análisis de timing confirma la decisión de bajar `clk_sys` a 33,33 MHz. Con 37,92 MHz de máximo
-queda una holgura de 3,63 ns, y el camino crítico es el que predice la teoría del uniciclo: del PC
-a través de la ROM, el banco de registros y la ALU, de vuelta al PC. Que el ruteo pese el 88 % del
+queda una holgura de 3,63 ns, y el camino crítico es el que predice la teoría del uniciclo, que va
+del PC a la ROM, al banco de registros y a la ALU, y vuelve al PC. Que el ruteo pese el 88 % del
 camino indica que el margen depende más de la colocación que de la profundidad lógica, y explica la
 variación entre versiones.
 
-La implementación de Vivado llega a la misma conclusión por otro camino: 5,03 ns de holgura en
-`clk_sys`, un camino crítico del PC a través de la ROM, la ALU y el banco de registros, y 84 % de
-ruteo. La simulación temporizada agrega lo que el análisis estático no muestra: que con esos
-retardos el programa sigue haciendo lo mismo que en RTL. Las 108 266 instrucciones de la corrida
+Vivado da números parecidos, con 5,03 ns de holgura en `clk_sys`, un camino crítico que también
+sale del PC y pasa por la ROM, la ALU y el banco de registros, y 84 % de ruteo. Lo que el análisis
+estático no muestra es si el programa sigue haciendo lo mismo con esos retardos, y eso es lo que
+aporta la simulación temporizada. Las 108 266 instrucciones de la corrida
 salen de la ROM con el valor del `.hex`, el PC sigue el flujo del programa en cada ciclo, y las
 tramas, el LED y el sonido de los dos disparos coinciden con los de la simulación RTL. El WHS de
-0,046 ns es pequeño pero positivo, y la simulación tampoco encontró violaciones de hold. Esta evidencia corresponde a la implementación de Vivado: el bitstream de openXC7 tiene otra
-colocación, y para ese el respaldo sigue siendo el análisis de nextpnr y la prueba en la tarjeta.
+0,046 ns es chico pero positivo, y la simulación tampoco encontró violaciones de hold.
+
+Todo esto vale para la implementación de Vivado. El bitstream de openXC7 tiene otra colocación, y
+para ese el respaldo sigue siendo el análisis de nextpnr y la prueba en la tarjeta.
 
 La coincidencia de la imagen ROM con el reensamblado elimina una posible discrepancia entre fuente
-y binario. Esa comprobación se repite si cambia `programa.s`, porque el Makefile no regenera el
-`.hex` por la fecha de la fuente: la reconstrucción se hace con `make programa`.
+y binario. Hay que repetirla si cambia `programa.s`, porque el Makefile no regenera el `.hex` por
+la fecha de la fuente y la reconstrucción se hace a mano con `make programa`.
 
 Las 18 pruebas Python comprueban codificación, fragmentación de tramas y actualizaciones de estado.
 No cubren la pérdida de una respuesta de colocación, que es el caso límite descrito en la sección
 7.4. Los bancos de entradas usan señales ideales y no validan el comportamiento mecánico de los
 pulsadores, que se comprobó en la tarjeta.
 
----
-
 ## 12. Problemas encontrados y su solución
 
-| # | Problema | Solución | Estado |
-|---|---|---|---|
-| P1 | Camino largo del procesador uniciclo. | Bajar `clk_sys` a 33,33 MHz y recalcular los parámetros de UART, buzzer y display. | Resuelto, 37,92 MHz de máximo. |
-| P2 | Índices de registros distintos según la dirección externa. | UART usa bits 3:2, los periféricos de un registro reciben `00` y VGA usa 10:2. | Resuelto, ejercitado por `tb_bus_perifericos` y `tb_top`. |
-| P3 | Pulsos cortos de `send` perdidos en el rearme de TX. | Mantener `send` hasta la notificación de fin. | Resuelto, `tb_uart_tx` y `tb_periferico_uart` pasan. |
-| P4 | RX de un solo byte frente a vueltas largas de software. | Pausa de 1 ms entre bytes en la PC. | Resuelto como mitigación, sin FIFO. |
-| P5 | Desalineación de color, texto y sincronismo VGA. | Retardar el control con la misma latencia y registrar las salidas. | Resuelto, `tb_periferico_vga` pasa. |
-| P6 | Borrado de pantalla costoso en hardware. | Valor inicial por configuración y limpieza por software. | Resuelto, `tb_top` verifica arranque y reinicio. |
-| P7 | Riesgo de mostrar la flota de J2 en el VGA. | `PINTAR_CASILLA` es la única rutina que copia un tablero a la pantalla y convierte un barco intacto de J2 en agua. | Resuelto, `tb_top` comprueba una colocación oculta. |
-| P8 | El reinicio de partida no debe borrar las ganadas. | Separar `INICIO` de `PARTIDA` y conservar el BCD al limpiar variables. | Resuelto, comprobado en `tb_top` y en la tarjeta. |
-| P9 | Con `RST` y `PWRDWN` del PLL atados a una constante, nextpnr-xilinx escribía mal su bit de inversión y el PLL quedaba en reinicio, sin `locked` ni salidas. | Dejar esos pines sin conectar, como lo usa LiteX con este flujo. | Resuelto, encontrado y comprobado en la tarjeta. |
-| P10 | `make synth` no reconocía las primitivas del PLL. | Cargar `cells_sim.v` y `cells_xtra.v` de Xilinx como cajas negras antes de `hierarchy -check`. | Resuelto (PR #39). |
-| P11 | La tarjeta tardaba unos 6 s en cargar el diseño desde la flash después de PROG. | `velocidad_config.py` sube el reloj de configuración (CCLK) de unos 3 a 33 MHz en el bitstream. | Resuelto, carga en unos 0,5 s. |
-| P12 | Los testbenches no compilaban con Icarus 12. | Usar Icarus 13 y fijar la versión en el README. | Resuelto. |
-| P13 | Respuesta de colocación perdida en la PC (sección 7.4). | Conservar la colocación original del id tras el vencimiento. | Caso límite abierto, no ocurrió en las pruebas. |
-| P14 | openXC7 no exporta un netlist que se pueda simular con retardos: el SDF de nextpnr-xilinx describe celdas internas sin modelo de simulación. | Implementar con Vivado solo para la simulación temporizada (`make sim-post`, sección 10.7). | Resuelto, 19 pruebas pasan sobre el netlist con SDF. |
-| P15 | En la simulación temporizada con `-transport_int_delays -pulse_r 0`, los glitches de la ROM aparecían como `X` y llegaban al PC. | Usar el modelo de retardo inercial de xelab, que descarta los pulsos más cortos que el retardo de la celda. | Resuelto, además la simulación va tres veces más rápido. |
-| P16 | xsim avanza 0,86 µs simulados por segundo sobre el netlist, y el escenario a 115 200 baudios tomaba más de tres horas. | Parámetro `BAUDIOS` en el `top`, 694 444 solo para el netlist de simulación, y pulsaciones de 150 µs. | Resuelto, la corrida toma 58 minutos. |
-| P17 | `xelab` no enlazaba la simulación: el compilador de Vivado no encuentra `crti.o` en Ubuntu y derivadas. | `LIBRARY_PATH=/usr/lib/x86_64-linux-gnu` en el Makefile. | Resuelto. |
-
----
+- P1, el camino largo del procesador uniciclo. Se bajó `clk_sys` a 33,33 MHz y se recalcularon
+  los parámetros de UART, buzzer y display. Resuelto, con 37,92 MHz de máximo.
+- P2, los índices de registro cambiaban según la dirección externa. La UART usa los bits 3:2, los
+  periféricos de un registro reciben `00` y el VGA usa 10:2. Lo ejercitan `tb_bus_perifericos` y
+  `tb_top`.
+- P3, el transmisor perdía los pulsos cortos de `send` en el rearme. Ahora `send` se mantiene hasta
+  que TX avisa el fin, y pasan `tb_uart_tx` y `tb_periferico_uart`.
+- P4, un RX de un solo byte frente a vueltas largas del software. Se mitigó con 1 ms de pausa entre
+  bytes en la PC, sin agregar FIFO.
+- P5, el color, el texto y el sincronismo del VGA salían desalineados. Se retrasó el control con la
+  misma latencia y se registraron las salidas, y `tb_periferico_vga` pasa.
+- P6, borrar la pantalla en hardware salía caro. La configuración la deja en cero y el software la
+  limpia, y `tb_top` verifica el arranque y el reinicio.
+- P7, el riesgo de mostrar la flota de J2 en el VGA. `PINTAR_CASILLA` es la única rutina que copia
+  un tablero a la pantalla y convierte un barco intacto de J2 en agua. `tb_top` comprueba una
+  colocación oculta.
+- P8, el reinicio de partida no podía borrar las ganadas. Se separó `INICIO` de `PARTIDA` y el BCD
+  se conserva al limpiar las variables. Comprobado en `tb_top` y en la tarjeta.
+- P9, con `RST` y `PWRDWN` del PLL atados a una constante, nextpnr-xilinx escribía mal su bit de
+  inversión y el PLL se quedaba en reinicio, sin `locked` ni salidas. Esos pines quedaron sin
+  conectar, como los usa LiteX con este flujo. Se encontró y se comprobó en la tarjeta.
+- P10, `make synth` no reconocía las primitivas del PLL. Ahora carga `cells_sim.v` y `cells_xtra.v`
+  de Xilinx como cajas negras antes de `hierarchy -check` (PR #39).
+- P11, la tarjeta tardaba unos 6 s en cargar el diseño desde la flash después de PROG.
+  `velocidad_config.py` sube el reloj de configuración (CCLK) de unos 3 a 33 MHz en el bitstream, y
+  ahora carga en unos 0,5 s.
+- P12, los testbenches no compilaban con Icarus 12. Se usa Icarus 13 y el README fija la versión.
+- P13, la respuesta de colocación perdida en la PC (sección 7.4). La corrección sería conservar la
+  colocación original del id después del vencimiento. Sigue abierto como caso límite, aunque no
+  pasó en las pruebas.
+- P14, openXC7 no exporta un netlist que se pueda simular con retardos, porque el SDF de
+  nextpnr-xilinx describe celdas internas sin modelo de simulación. La simulación temporizada se
+  hace con una implementación de Vivado (`make sim-post`, sección 10.7), y sus 19 pruebas pasan.
+- P15, en la simulación temporizada con `-transport_int_delays -pulse_r 0` los glitches de la ROM
+  salían como `X` y llegaban al PC. Con el modelo de retardo inercial de xelab desaparecen, y la
+  simulación va tres veces más rápido.
+- P16, xsim avanza 0,86 µs simulados por segundo sobre el netlist, y el escenario a 115 200 baudios
+  tomaba más de tres horas. El parámetro `BAUDIOS` del `top` lleva la UART a 694 444 baudios solo
+  en ese netlist, las pulsaciones bajan a 150 µs, y la corrida queda en 58 minutos.
+- P17, `xelab` no enlazaba la simulación porque el compilador de Vivado no encuentra `crti.o` en
+  Ubuntu y derivadas. El Makefile le pasa `LIBRARY_PATH=/usr/lib/x86_64-linux-gnu`.
 
 ## 13. Análisis crítico
 
@@ -1376,18 +1397,17 @@ pulsadores, que se comprobó en la tarjeta.
   caso de la respuesta perdida (P13) puede desincronizar su vista.
 - La aplicación de PC requiere una terminal POSIX.
 - El barrido puede leer una palabra mientras se modifica, con un artefacto de un cuadro como máximo.
-- La simulación temporizada usa la implementación de Vivado y no la de nextpnr-xilinx que se carga
-  en la tarjeta, y la UART a 694 444 baudios. Los retardos simulados son los de un diseño
-  equivalente, no los del bitstream exacto. Para el bitstream de openXC7 queda el timing estático
-  de nextpnr-xilinx (sección 10.5).
+- La simulación temporizada usa la implementación de Vivado, con la UART a 694 444 baudios. El
+  bitstream que se carga en la tarjeta sale de nextpnr-xilinx, con otra colocación y otros
+  retardos, y para ese solo queda el timing estático de la sección 10.5.
 - La simulación temporizada tarda cerca de una hora, así que no cabe en una revisión de cada cambio.
 
 ### Mejoras posibles
 
 Una FIFO RX y una rutina de transmisión que siga atendiendo la recepción reducirían la dependencia
-del retardo de la PC. El protocolo podría incluir un número de secuencia y la respuesta completa
-de la operación aceptada, además de una consulta de estado al reconectar. El chequeo XOR puede
-sustituirse por un CRC si se requiere detectar más errores.
+del retardo de la PC. Al protocolo le servirían un número de secuencia, la respuesta completa de
+la operación aceptada y una consulta de estado al reconectar. Si hiciera falta detectar más
+errores, el chequeo XOR se puede cambiar por un CRC.
 
 Para video, actualizar durante el blanking o usar doble buffer evita mezclar una vista
 parcialmente escrita. En un procesador futuro, una interfaz con espera permitiría usar BRAM de
@@ -1397,33 +1417,30 @@ abandonar la ejecución estrictamente uniciclo de las cargas.
 Automatizar `make test-app`, el reensamblado, la simulación y la síntesis en integración continua
 haría visibles los errores antes de cada merge.
 
----
-
 ## 14. Conclusiones y aprendizaje obtenido
 
-1. **La plataforma integra hardware y software mediante un contrato verificable.** El procesador
-   usa instrucciones de memoria para acceder tanto a RAM como a periféricos, y el AT y el MUX
-   determinan el destino sin incorporar reglas del juego. La partida completa en simulación y en
+1. La plataforma integra hardware y software mediante un contrato que se puede verificar. El
+   procesador usa instrucciones de memoria para acceder tanto a RAM como a periféricos, y el AT y el
+   MUX determinan el destino sin incorporar reglas del juego. La partida completa en simulación y en
    la tarjeta demuestra esta integración.
-2. **El procesador uniciclo condiciona la organización de memoria y el reloj.** Las lecturas
+2. El procesador uniciclo condiciona la organización de memoria y el reloj. Las lecturas
    combinacionales permiten resolver las cargas en un ciclo, pero obligan a usar LUTRAM y alargan
    el camino crítico, dominado por el ruteo. La frecuencia de 33,33 MHz responde a ese compromiso
    y la implementación la confirma con 37,92 MHz de máximo.
-3. **Los gráficos por casillas son adecuados para esta aplicación.** Los tableros y mensajes se
+3. Los gráficos por casillas alcanzan para este juego. Los tableros y mensajes se
    representan con 300 palabras visibles, mientras el periférico genera el barrido por su cuenta.
    La alineación de control y datos en dos ciclos evita desplazamientos en la imagen.
-4. **Una partida nueva y un reinicio general tienen efectos distintos.** El programa conserva
+4. Una partida nueva y un reinicio general tienen efectos distintos. El programa conserva
    las ganadas al volver a la colocación y solo las inicializa en el arranque general. El banco del
    top verifica el incremento de J2 y su conservación después de `BTN_RST`.
-5. **Las pruebas automáticas dieron confianza para integrar.** Los 15 testbenches y las 18 pruebas
+5. Las pruebas automáticas dieron confianza para integrar. Los 15 testbenches y las 18 pruebas
    de la PC pasan con el flujo del repositorio, y los errores encontrados en la tarjeta (el PLL sin
-   salida y la carga lenta desde la flash) fueron de implementación, no de lógica.
-6. **La simulación RTL y la síntesis no sustituyen la evidencia de implementación.** El reporte de
+   salida y la carga lenta desde la flash) salieron de la implementación, y la lógica no tuvo
+   errores en la tarjeta.
+6. La simulación RTL y la síntesis no reemplazan la evidencia de implementación. El reporte de
    timing y las pruebas en la tarjeta complementan las simulaciones. La simulación temporizada
-   cierra la validación: el mismo programa corre sobre el netlist ruteado, con los retardos de cada
-   celda y ruta, y la instrucción se estabiliza a unos 6 ns del flanco, dentro del período de 30 ns.
-
----
+   cierra la validación. El mismo programa corre sobre el netlist ruteado con los retardos de cada
+   celda y ruta, y la instrucción se estabiliza a unos 6 ns del flanco, muy dentro de los 30 ns.
 
 ## 15. Referencias
 
