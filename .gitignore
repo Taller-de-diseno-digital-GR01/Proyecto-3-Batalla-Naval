@@ -13,6 +13,10 @@ src/build/
 *.log
 *.tcl
 clockInfo.txt
+# Menos el script de make sim-post, ese es fuente
+!src/fpga/vivado_timesim.tcl
+# Ni los logs que el informe cita como evidencia
+!docs/informe/evidencia/*.log
 
 __pycache__/
 *.pyc

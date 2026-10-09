@@ -42,13 +42,13 @@ El enunciado completo del proyecto está en [`EL3313_proyecto3_2S2026.pdf`](EL33
   núcleo RISC-V parte de [riscv-simple-sv](https://github.com/tilk/riscv-simple-sv) (licencia en
   `LICENSE.riscv-simple-sv`). `prueba_vga.sv` es un top de prueba física del VGA sin procesador.
 - `src/sim/`: testbenches autoverificables (`tb_<modulo>.sv`), más `tb_top.sv` del sistema
-  completo con el programa real.
-- `src/sim/post_sintesis/`: simulación del netlist de síntesis del sistema completo, con un modelo
-  de comportamiento de la primitiva `PLLE2_BASE`.
+  completo con el programa real y `tb_top_temporizado.sv`, la prueba de la simulación
+  post-implementación temporizada.
 - `src/sim/riscv-tests/`: pruebas rv32ui oficiales de RISC-V, armadas para la ROM, que usa
   `tb_procesador_uniciclo.sv`.
-- `src/fpga/`: constraints de la Basys3 (`basys3.xdc`) y `velocidad_config.py`, que acelera la
-  carga del bitstream desde la flash.
+- `src/fpga/`: constraints de la Basys3 (`basys3.xdc`), `velocidad_config.py`, que acelera la
+  carga del bitstream desde la flash, y `vivado_timesim.tcl`, que implementa el diseño con Vivado
+  y exporta el netlist con retardos para `make sim-post`.
 - `sw/programa.s`: programa en ensamblador rv32i que corre en el procesador, y `sw/programa.hex`,
   su imagen para la ROM.
 - `sw/ensamblar.sh` y `sw/ensamblar_llvm.sh`: ensamblan el programa con binutils de GNU o con LLVM,
@@ -58,7 +58,7 @@ El enunciado completo del proyecto está en [`EL3313_proyecto3_2S2026.pdf`](EL33
 - `sw/pruebas/`: pruebas de la app de PC.
 - `GNUmakefile`: flujo del proyecto (Linux, WSL, FreeBSD y macOS): simulación, síntesis completa
   con el toolchain abierto openXC7 (sin Vivado), programación de la tarjeta, ensamblado del
-  programa y app de PC.
+  programa y app de PC. Solo la simulación post-implementación temporizada usa Vivado.
 - `Makefile`: envoltorio para FreeBSD, que pasa cada target a GNU make (`gmake`).
 
 ## Diseño modular
@@ -134,7 +134,17 @@ El programa en ensamblador, que no es hardware pero es donde viven las reglas de
 - [Icarus Verilog](https://github.com/steveicarus/iverilog) **13** (`iverilog`, `vvp`),
   obligatorio para correr las simulaciones. La versión 12 que traen los repositorios de varias
   distribuciones no acepta `return` dentro de un `task` ni los literales `'{...}` de arreglos que
-  usan los testbenches, así que hay que compilarlo desde el tag `v13_0`.
+  usan los testbenches, así que hay que compilarlo desde el tag `v13_0`. En Ubuntu 24.04 y
+  derivadas, las herramientas de compilación van con `apt` y el Icarus queda en `~/.local`, sin
+  `sudo`:
+
+  ```sh
+  sudo apt install autoconf gperf flex bison g++ make
+  git clone --depth 1 --branch v13_0 https://github.com/steveicarus/iverilog.git
+  cd iverilog && sh autoconf.sh && ./configure --prefix=$HOME/.local && make -j && make install
+  ```
+
+  `~/.local/bin` tiene que ir antes que `/usr/bin` en el `PATH`, y `iverilog -V` debe decir 13.0.
 - [GTKWave](https://gtkwave.sourceforge.net/), opcional, solo para inspeccionar formas de onda
   (`make wave`).
 - [yosys](https://github.com/YosysHQ/yosys), para la síntesis.
@@ -145,6 +155,9 @@ El programa en ensamblador, que no es hardware pero es donde viven las reglas de
   cargarlo en la tarjeta.
 - Binutils de GNU para RISC-V (`riscv64-unknown-elf-as` y `-ld`) o LLVM (`llvm-mc`), opcionales,
   solo para volver a ensamblar el programa. `sw/programa.hex` ya está versionado.
+- Vivado (probado con 2026.1, la edición gratuita alcanza para el XC7A35T), opcional, solo para la
+  simulación post-implementación temporizada (`make sim-post`). Por defecto se toma de
+  `/opt/Xilinx/2026.1/Vivado`, otra ruta se pasa con `XILINX_VIVADO=<ruta>`.
 
 ## Instalación
 
@@ -186,9 +199,9 @@ make wave TB=<modulo>           # corre la simulación y abre GTKWave
 make synth                      # sintetiza el top con yosys y revisa que no haya latches inferidos
 make synth SYNTH_TOP=<modulo>   # lo mismo con un módulo suelto
 make lint                       # verilator --lint-only -Wall sobre el top, falla con latches o drivers múltiples
-make post-sintesis              # simula el netlist de síntesis del top con el programa real (tarda más de 15 minutos)
 make test-app                   # pruebas de la app de PC (unittest), no necesita la tarjeta
 make programa                   # vuelve a ensamblar sw/programa.s y regenera sw/programa.hex
+make sim-post                   # simulación post-implementación temporizada con Vivado, ~1 hora
 ```
 
 Los testbenches se corren siempre con `make`, porque los que cargan un `.hex` en la ROM esperan
@@ -201,9 +214,12 @@ Verificación principal:
 - `tb_top` simula el sistema completo con el programa real: arranque, colocación de los dos
   jugadores, rechazo de colocaciones inválidas, privacidad en el VGA, una partida completa hasta
   la victoria y el reinicio de partida con `BTN_RST`.
-- `tb_post_sintesis` (`make post-sintesis`) corre el programa real sobre el netlist que sale de
-  `synth_xilinx`, ya mapeado a primitivas de la Artix-7, y revisa por los pines el arranque, la
-  colocación y la validación de disparos (impacto, fallo y repetidos).
+- `make sim-post` implementa el diseño con Vivado y corre `tb_top_temporizado` sobre el netlist
+  ruteado con sus retardos (SDF) en xsim: el arranque del programa, revisando cada instrucción que
+  sale de la ROM y el flujo del PC, la colocación de las dos flotas y un disparo de cada jugador.
+  Para que quepa en una hora, ese netlist lleva la UART a 694 444 baudios, el de la tarjeta sigue en
+  115 200. La misma prueba corre sobre el RTL con `make sim TB=top_temporizado`. Detalles en la
+  sección 10.7 del informe.
 
 ## Ejecución
 

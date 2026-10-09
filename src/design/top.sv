@@ -6,7 +6,10 @@
 // queda en alto hasta que el PLL engancha. BTN_RST es una entrada mas del periferico de entradas y
 // lo atiende el programa, para conservar las partidas ganadas.
 module top #(
-  parameter ARCHIVO_HEX = "sw/programa.hex" // programa de la ROM, relativo a la raiz del repo
+  parameter ARCHIVO_HEX = "sw/programa.hex", // programa de la ROM, relativo a la raiz del repo
+  // Velocidad de la UART. En la tarjeta siempre 115200, la de la aplicacion de PC. Solo la simulacion
+  // post-implementacion (make sim-post) la sube, para que una partida quepa en una corrida razonable
+  parameter int BAUDIOS = 115200
   ) (
   input  logic       clk, // 100 MHz, pin W5
 
@@ -151,7 +154,7 @@ module top #(
   // asi que DataAddress_o[3:2] no les sirve: el LED en 0x0001_0138 traeria 10 y no 00
 
   // Control 0x40, TX 0x44 y RX 0x48, el registro sale de DataAddress_o[3:2]
-  periferico_uart #(.CLK_FREQ_HZ(CLK_SYS_HZ)) u_periferico_uart (
+  periferico_uart #(.CLK_FREQ_HZ(CLK_SYS_HZ), .BAUDIOS(BAUDIOS)) u_periferico_uart (
     .clk_i          (clk_sys),
     .rst_i          (rst),
     .write_enable_i (uart_we),
