@@ -1,0 +1,65 @@
+#-----------------------------------------------------------
+# xsim v2026.1 (64-bit)
+# SW Build 6511674 on Tue Jun 16 11:01:26 MDT 2026
+# IP Build 6504888 on Tue Jun 09 09:05:25 MDT 2026
+# SharedData Build 6501428 on Mon Jun 08 17:34:18 MDT 2026
+# Start of session at: Thu Oct  8 18:01:58 2026
+# Process ID         : 103454
+# Current directory  : /home/jeffchq/Documentos/IE/2S2026/Digital_design/Proyecto-3-Batalla-Naval/src/build/timesim
+# Command line       : xsim -log xsim.log -mode tcl -source {xsim.dir/tb_top_temporizado/xsim_script.tcl}
+# Log file           : /home/jeffchq/Documentos/IE/2S2026/Digital_design/Proyecto-3-Batalla-Naval/src/build/timesim/xsim.log
+# Journal file       : /home/jeffchq/Documentos/IE/2S2026/Digital_design/Proyecto-3-Batalla-Naval/src/build/timesim/xsim.jou
+# Running On         : jeffchq-Vivobook-ASUSLaptop-M1502IA-M1502IA
+# Platform           : Zorin
+# Operating System   : Zorin OS 18.1
+# Processor Detail   : AMD Ryzen 5 4600H with Radeon Graphics
+# CPU Frequency      : 2170.733 MHz
+# CPU Physical cores : 6
+# CPU Logical cores  : 12
+# Host memory        : 7706 MB
+# Swap memory        : 2147 MB
+# Total Virtual      : 9854 MB
+# Available Virtual  : 2949 MB
+#-----------------------------------------------------------
+source xsim.dir/tb_top_temporizado/xsim_script.tcl
+# xsim {tb_top_temporizado} -autoloadwcfg -runall
+Time resolution is 1 ps
+run -all
+ok el sistema arranca en reinicio mientras el PLL no engancha
+  el reinicio baja en 611 ns
+ok la primera instruccion despues del reinicio es la de la direccion 0
+  instruccion  0: PC 0000  00010437
+  instruccion  1: PC 0004  000114b7
+  instruccion  2: PC 0008  00002937
+  instruccion  3: PC 000c  24092423
+  instruccion  4: PC 0010  12042823
+  instruccion  5: PC 0014  04042023
+  instruccion  6: PC 0018  00003137
+  instruccion  7: PC 001c  348010ef
+  instruccion  8: PC 1364  ffc10113
+  instruccion  9: PC 1368  00112023
+  instruccion 10: PC 136c  24892383
+  instruccion 11: PC 1370  00090293
+ok la primera trama es Estado, fase de colocacion
+ok el LED marca la fase de colocacion
+ok el display muestra 00 00 de partidas ganadas
+ok el barco 0 del Jugador 2 se acepta
+ok el barco 1 del Jugador 2 se acepta
+ok el barco 2 del Jugador 2 se acepta
+ok arranca la batalla
+ok con el turno del Jugador 1
+ok el LED pasa a batalla
+ok el disparo del Jugador 1 en (0,0) es impacto
+ok y suena el sonido de impacto
+ok y pasa el turno al Jugador 2
+ok el disparo del Jugador 2 en (5,5) es fallo
+ok y suena el sonido de fallo
+ok y vuelve el turno al Jugador 1
+ok el LED sigue en batalla
+ok las 108266 instrucciones ejecutadas salen de la ROM y siguen el flujo del programa
+19 pruebas, 0 fallos
+$finish called at time : 3248612020 ps : File "/home/jeffchq/Documentos/IE/2S2026/Digital_design/Proyecto-3-Batalla-Naval/src/sim/tb_top_temporizado.sv" Line 314
+run: Time (s): cpu = 00:00:09 ; elapsed = 00:53:38 . Memory (MB): peak = 1516.805 ; gain = 8.004 ; free physical = 370 ; free virtual = 1901
+exit
+INFO: xsimkernel Simulation Memory Usage: 475100 KB (Peak: 540636 KB), Simulation CPU Usage: 3215510 ms
+INFO: [Common 17-206] Exiting xsim at Thu Oct  8 18:55:49 2026...

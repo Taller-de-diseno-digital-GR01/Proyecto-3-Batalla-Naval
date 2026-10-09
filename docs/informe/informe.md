@@ -1170,8 +1170,10 @@ procesador, la ROM, la RAM, el AT y los periféricos son los mismos. El testbenc
 pulsaciones a 150 µs: alcanza, porque la vuelta más larga del lazo del programa, un repintado del
 tablero, dura unos 100 µs.
 
-**Resultado.** Simulación de 3,25 ms del sistema completo con los retardos post-ruteo (SDF), en
-58 minutos:
+**Resultado.** Simulación de 3,25 ms del sistema completo con los retardos post-ruteo (SDF). La
+simulación tardó 53 minutos, y 58 con la implementación y la compilación. Esta es la salida del
+testbench; el log completo de xsim está en
+[`evidencia/sim_post_xsim.log`](evidencia/sim_post_xsim.log):
 
 ```text
 ok el sistema arranca en reinicio mientras el PLL no engancha
